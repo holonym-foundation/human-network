@@ -1,0 +1,29 @@
+[package]
+name = "signer"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow.workspace = true
+axum = {version = "0.7.5", features = ["macros"]}
+ethers.workspace = true
+jsonrpsee.workspace = true
+jsonwebtoken = "9.3.0"
+messages.workspace = true
+redis.workspace = true
+reqwest = { version = "0.12.7", features = ["gzip"] }
+serde.workspace = true
+serde_json.workspace = true
+flate2 = "1.0"
+tokio.workspace = true
+rpc_trait.workspace = true
+human-crypto.workspace = true
+tower = { version = "0.5.1", features = ["timeout"] }
+tower-http = { version = "0.5.2", features = ["cors", "timeout"]}
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["json"] }
+http = "1.1.0"
+
+[[bin]]
+name = "signer"
+path = "src/main.rs"

@@ -1,0 +1,1 @@
+This node serves as a shared tracing / logs for all nodes during tests

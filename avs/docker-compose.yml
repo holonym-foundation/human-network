@@ -1,0 +1,207 @@
+x-operator: &operator
+  build:
+    context: ..
+    dockerfile: ./Dockerfile
+  env_file: .env
+
+x-othentic-cli: &othentic-cli
+  <<: *operator
+  env_file: .env
+  entrypoint: othentic-cli
+
+x-standard-config: &standard-config
+  THRESHOLD_T: 4
+  THRESHOLD_N: 6
+  THRESHOLD_EPSILON: 1
+  TESTNET_LOGGING_URL: http://10.8.0.22:3001/
+  HUMAN_NODE_TEST_MODE: "true"
+
+x-prover: &prover
+  depends_on:
+    - testnet-logs
+  <<: *operator
+  command: ["sh", "-c", "redis-server --daemonize yes; ./prover"]
+  ports: 
+    - "3000"
+
+x-verifier: &verifier
+  <<: *operator
+  command: ["sh", "-c", "redis-server --daemonize yes; ./verifier"]
+
+    
+services:
+  # For sharing all logs to the the same place for test purposes
+  testnet-logs:
+    <<: *operator
+    command: ["sh", "-c", "redis-server --daemonize yes; ./testnet_logging"]
+    ports:
+      - "3001"
+    networks: 
+      p2p:
+        ipv4_address: 10.8.0.22
+
+  prover-1: 
+    <<: *prover
+    environment:
+      MY_NODE_IDX: 1
+      OPRFSecp256k1_KEYSHARE: ${SECP256K1_OPRF_KEYSHARE_PROVER1}
+      JWTPRFSecp256k1_KEYSHARE: ${SECP256K1_JWTPRF_KEYSHARE_PROVER1}
+      DecryptBabyJubJub_KEYSHARE: ${BABYJUBJUB_DECRYPT_KEYSHARE_PROVER1}
+      <<: *standard-config
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.101
+  prover-2: 
+    <<: *prover
+    environment:
+      MY_NODE_IDX: 2
+      OPRFSecp256k1_KEYSHARE: ${SECP256K1_OPRF_KEYSHARE_PROVER2}
+      JWTPRFSecp256k1_KEYSHARE: ${SECP256K1_JWTPRF_KEYSHARE_PROVER2}
+      DecryptBabyJubJub_KEYSHARE: ${BABYJUBJUB_DECRYPT_KEYSHARE_PROVER2}
+
+      <<: *standard-config
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.102
+  prover-3: 
+    <<: *prover
+    environment:
+      MY_NODE_IDX: 3
+      OPRFSecp256k1_KEYSHARE: ${SECP256K1_OPRF_KEYSHARE_PROVER3}
+      JWTPRFSecp256k1_KEYSHARE: ${SECP256K1_JWTPRF_KEYSHARE_PROVER3}
+      DecryptBabyJubJub_KEYSHARE: ${BABYJUBJUB_DECRYPT_KEYSHARE_PROVER3}
+      <<: *standard-config
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.103
+  prover-4: 
+    <<: *prover
+    environment:
+      MY_NODE_IDX: 4
+      OPRFSecp256k1_KEYSHARE: ${SECP256K1_OPRF_KEYSHARE_PROVER4}
+      JWTPRFSecp256k1_KEYSHARE: ${SECP256K1_JWTPRF_KEYSHARE_PROVER4}
+      DecryptBabyJubJub_KEYSHARE: ${BABYJUBJUB_DECRYPT_KEYSHARE_PROVER4}
+      <<: *standard-config
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.104
+  prover-5: 
+    <<: *prover
+    environment:
+      MY_NODE_IDX: 5
+      OPRFSecp256k1_KEYSHARE: ${SECP256K1_OPRF_KEYSHARE_PROVER5}
+      JWTPRFSecp256k1_KEYSHARE: ${SECP256K1_JWTPRF_KEYSHARE_PROVER5}
+      DecryptBabyJubJub_KEYSHARE: ${BABYJUBJUB_DECRYPT_KEYSHARE_PROVER5}
+      <<: *standard-config
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.105
+  prover-6: 
+    <<: *prover
+    environment:
+      MY_NODE_IDX: 6
+      OPRFSecp256k1_KEYSHARE: ${SECP256K1_OPRF_KEYSHARE_PROVER6}
+      JWTPRFSecp256k1_KEYSHARE: ${SECP256K1_JWTPRF_KEYSHARE_PROVER6}
+      DecryptBabyJubJub_KEYSHARE: ${BABYJUBJUB_DECRYPT_KEYSHARE_PROVER6}
+      <<: *standard-config
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.106
+
+
+  avswebapi-1:
+    <<: *verifier
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.41
+  avswebapi-2:
+    <<: *verifier
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.42
+  avswebapi-3:
+    <<: *verifier
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.43
+
+  relay:
+    <<: *operator
+    command: ["sh", "-c", "redis-server --daemonize yes; ./relayer"]
+    environment:
+      <<: *standard-config
+      OTHENTIC_RPC_URL: http://10.8.0.69:8545/
+      ACTIVE_PROVERS: '[{"idx":1,"uri":"10.8.0.101:3000","pubkeys":{"BabyJubJub":{"DecryptBabyJubJub":[1,32,0,0,0,0,0,0,0,218,200,136,106,139,69,235,144,88,22,76,143,85,149,227,105,117,19,10,173,51,191,124,250,175,78,169,40,214,127,247,39]},"Secp256k1":{"JWTPRFSecp256k1":[3,186,195,214,159,229,144,12,168,59,181,253,234,120,217,23,48,145,195,250,150,148,157,114,119,56,59,146,11,118,114,209,238],"OPRFSecp256k1":[2,176,44,58,22,185,19,25,193,137,30,244,70,137,231,145,42,165,25,120,201,32,165,101,54,11,111,11,142,101,112,218,47]}}},{"idx":2,"uri":"10.8.0.102:3000","pubkeys":{"Secp256k1":{"JWTPRFSecp256k1":[2,84,77,189,33,96,189,59,4,139,57,64,211,51,52,58,234,212,72,160,13,247,105,93,131,23,204,26,95,251,5,119,237],"OPRFSecp256k1":[2,87,252,99,87,241,174,24,113,51,127,102,170,29,180,102,188,23,42,60,192,194,23,236,7,53,221,140,64,113,60,56,74]},"BabyJubJub":{"DecryptBabyJubJub":[1,32,0,0,0,0,0,0,0,82,45,230,11,115,209,196,116,47,188,231,173,164,81,50,160,132,134,247,184,15,209,37,90,255,60,134,124,232,5,18,8]}}},{"idx":6,"uri":"10.8.0.106:3000","pubkeys":{"Secp256k1":{"JWTPRFSecp256k1":[3,36,245,157,1,38,98,178,142,41,109,88,38,173,160,149,122,26,14,45,14,135,202,39,232,78,164,189,199,206,90,91,209],"OPRFSecp256k1":[2,200,122,251,16,223,95,31,237,36,241,175,137,10,27,71,23,186,183,193,33,32,43,255,181,247,244,119,103,151,200,231,24]},"BabyJubJub":{"DecryptBabyJubJub":[0,32,0,0,0,0,0,0,0,49,247,30,50,33,79,49,241,42,180,41,127,203,203,218,128,72,48,130,40,32,36,57,194,175,253,205,182,134,179,158,39]}}},{"idx":5,"uri":"10.8.0.105:3000","pubkeys":{"BabyJubJub":{"DecryptBabyJubJub":[0,32,0,0,0,0,0,0,0,100,164,41,110,124,127,114,221,226,114,27,121,91,213,172,176,159,179,195,205,128,40,233,136,26,196,24,37,67,112,80,18]},"Secp256k1":{"OPRFSecp256k1":[3,143,187,227,248,60,117,246,6,198,157,225,178,84,183,55,9,13,37,200,195,235,137,209,123,102,215,142,121,166,152,190,220],"JWTPRFSecp256k1":[3,240,75,203,227,72,215,97,57,205,54,194,189,23,243,222,159,71,246,155,65,252,90,75,32,204,191,69,169,91,190,69,200]}}},{"idx":4,"uri":"10.8.0.104:3000","pubkeys":{"Secp256k1":{"OPRFSecp256k1":[2,196,25,226,64,141,148,64,167,3,167,164,39,146,143,157,119,147,173,189,96,112,34,224,254,208,168,85,38,245,62,136,219],"JWTPRFSecp256k1":[2,138,176,91,11,146,11,81,140,94,68,2,192,51,88,142,110,9,135,186,99,117,233,112,100,29,117,58,24,67,101,8,158]},"BabyJubJub":{"DecryptBabyJubJub":[1,32,0,0,0,0,0,0,0,117,65,152,244,149,165,129,154,225,213,223,98,24,114,118,6,248,89,232,96,219,19,97,3,85,248,57,92,187,116,22,12]}}},{"idx":3,"uri":"10.8.0.103:3000","pubkeys":{"Secp256k1":{"OPRFSecp256k1":[3,155,98,22,105,136,154,34,19,49,37,117,239,251,150,128,33,180,180,228,104,124,63,7,134,49,87,154,123,47,15,160,84],"JWTPRFSecp256k1":[3,37,106,178,78,85,17,141,57,169,223,119,179,48,93,106,184,141,102,38,122,22,52,192,204,148,35,175,245,91,38,65,233]},"BabyJubJub":{"DecryptBabyJubJub":[0,32,0,0,0,0,0,0,0,47,43,212,127,174,123,43,27,41,160,104,94,162,1,141,42,133,98,51,12,36,201,95,179,180,20,36,96,245,98,236,42]}}}]'
+    ports:
+      - "3031:3000"
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.2
+        
+  aggregator:
+    <<: *othentic-cli
+    command: ["node", "aggregator", "--json-rpc"]
+    ports:
+      - "8545:8545"
+      - "9876:9876"
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.69
+  attester-1:
+    <<: *othentic-cli
+    command: [
+      "node",
+      "attester",
+      "/ip4/10.8.0.69/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
+      "--avs-webapi",
+      "http://10.8.0.41",
+    ]
+    environment:
+      - PRIVATE_KEY=${PRIVATE_KEY_VALIDATOR1}
+    depends_on:
+      aggregator:
+        condition: service_started
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.11
+  attester-2:
+    <<: *othentic-cli
+    command: [
+      "node",
+      "attester",
+      "/ip4/10.8.0.69/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
+      "--avs-webapi",
+      "http://10.8.0.42",
+    ]
+    environment:
+      - PRIVATE_KEY=${PRIVATE_KEY_VALIDATOR2}
+    depends_on:
+      aggregator:
+        condition: service_started
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.12
+  attester-3:
+    <<: *othentic-cli
+    command: [
+      "node",
+      "attester",
+      "/ip4/10.8.0.69/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
+      "--avs-webapi",
+      "http://10.8.0.43",
+    ]
+    environment:
+      - PRIVATE_KEY=${PRIVATE_KEY_VALIDATOR3}
+    depends_on:
+      aggregator:
+        condition: service_started
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.13
+
+networks:
+  p2p:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 10.8.0.0/16

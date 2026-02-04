@@ -1,0 +1,145 @@
+x-operator: &operator
+  image: humannetwork/operator:mainnetalphaV3.2.0
+  env_file: .env
+
+x-othentic-cli: &othentic-cli
+  <<: *operator
+  env_file: .env
+  entrypoint: othentic-cli
+
+x-verifier: &verifier
+  image: humannetwork/operator:mainnetalphaV3.2.0
+  env_file: .env
+  command: [ "./verifier" ]
+
+# Define a custom network with a subnet
+networks:
+  human_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16 # Define a subnet for the network
+services:
+  redis:
+    image: redis:latest
+    container_name: redis_server
+    volumes:
+      - ./redis_data:/data # Persist Redis data
+    ports:
+      - 6379:6379
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD}  --replicaof no one --maxmemory-policy noeviction
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD} # Define password in environment
+    networks:
+      human_network:
+        ipv4_address: 172.28.0.5 # Static IP for Redis
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "10"
+        max-size: "20m" # file size
+
+  multiplier:
+    <<: *operator
+    container_name: multiplier
+    command: >
+      sh -c
+        "sleep 2; \
+         ./human_node --bootstrap-peer-id ${BOOTSTRAP_PEER_ID} --bootstrap-multiaddr ${BOOTSTRAP_MULTIADDR} --relay-peer-id ${RELAY_PEER_ID} --relay-multiaddr ${RELAY_MULTIADDR} --port ${TCP_PORT} --redis redis://:${REDIS_PASSWORD}@172.28.0.5:6379/0 | bunyan"
+    ports:
+      - "${TCP_PORT}:${TCP_PORT}" # TCP
+      - "${UDP_PORT}:${UDP_PORT}/udp" # UDP
+    environment:
+      - BOOTSTRAP_PEER_ID=${BOOTSTRAP_PEER_ID}
+      - BOOTSTRAP_MULTIADDR=${BOOTSTRAP_MULTIADDR}
+      - RELAY_PEER_ID=${RELAY_PEER_ID}
+      - RELAY_MULTIADDR=${RELAY_MULTIADDR}
+      - TCP_PORT=${TCP_PORT}
+      - UDP_PORT=${UDP_PORT}
+      - RSA_SEED=${RSA_SEED}
+      - SECP256K1_SEED=${SECP256K1_SEED}
+      - NODE_TYPE=${NODE_TYPE}
+      - NODE_MULTIADDR=${NODE_MULTIADDR}
+      - REDIS_PASSWORD=${REDIS_PASSWORD} # Pass password to redis service
+    volumes:
+      - ./node_state:/state
+    networks:
+      human_network:
+        ipv4_address: 172.28.0.10 # Static IP for multiplier
+    depends_on:
+      - redis # Ensure Redis starts first
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "10"
+        max-size: "20m" # file size
+
+  avswebapi:
+    <<: *verifier
+    container_name: avs_web_api
+    environment:
+      - IPFS_HOST=${IPFS_HOST}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@172.28.0.5:6379/0
+      - L1_RPC=${L1_RPC}
+      - REDIS_PASSWORD=${REDIS_PASSWORD} # Pass password to redis service
+    ports:
+      - "${AVS_WEBAPI_PORT}:${AVS_WEBAPI_PORT}"
+    networks:
+      human_network:
+        ipv4_address: 172.28.0.20 # Static IP for avs_web_api
+    depends_on:
+      - redis
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "10"
+        max-size: "20m" # file size
+
+  attestor:
+    <<: *othentic-cli
+    container_name: attestor
+    command:
+      - "node"
+      - "attester"
+      # multiaddress of the aggregator node
+      - "${AGGREGATOR_MULTIADDR:-/ip4/127.0.0.1/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}}"
+      - "--json-rpc"
+      - "--json-rpc.custom-message-enabled"
+      - "--avs-webapi"
+      - "http://172.28.0.20" # Static IP of avswebapi
+      - "--avs-webapi-port"
+      - "${AVS_WEBAPI_PORT}"
+      - "--l1-chain"
+      - "mainnet"
+      - "--l2-chain"
+      - "base"
+      - "--metrics"
+      - "--p2p.datadir"
+      - "data/peerstore/attester"
+      - "--p2p.port"
+      - "9876"
+      - "--announced-addresses"
+      # the actual ip and the peer id of your attestor
+      - "/ip4/<YOUR_IP>/tcp/9876/p2p/<YOUR_OTHENTIC_PEER_ID_NOT_PEER_REGISTRY_ONE>"
+    environment:
+      - PRIVATE_KEY=${PRIVATE_KEY_ATTESTER}
+      - OTHENTIC_BOOTSTRAP_ID=${OTHENTIC_BOOTSTRAP_ID}
+      - AVS_WEBAPI_PORT=${AVS_WEBAPI_PORT}
+      - LOG_DIR=data/logs/attester
+    ports:
+      - 9876:9876
+      - 8545:8545
+    volumes:
+      - ./data/peerstore/attestor:/app/data/peerstore/attestor
+      - ./data/logs/attestor:/app/logs/peerstore/attestor
+    networks:
+      human_network:
+        ipv4_address: 172.28.0.30 # Static IP for attestor
+    depends_on:
+      - avswebapi
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "10"
+        max-size: "20m"

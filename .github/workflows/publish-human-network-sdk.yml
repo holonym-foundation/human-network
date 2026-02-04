@@ -1,0 +1,51 @@
+name: Publish human-network-sdk to npmjs
+
+on:
+  push:
+    paths: [
+      '.github/workflows/publish-human-network-sdk.yml', 
+      'human/human-network-sdk/package.json'
+    ]
+  pull_request:
+    paths:
+      - '.github/workflows/publish-human-network-sdk.yml'
+      - 'human/human-network-sdk/package.json'
+
+permissions:
+  id-token: write # This is required for requesting the JWT
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.ref_name == 'main'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+          # token: ${{ secrets.GITHUB_TOKEN }}
+          # Personal access token. For some reason, the default token doesn't work.
+          # This token might expire, so if this step fails, make sure the token is up-to-date.
+          # token: ${{ secrets.PERSONAL_GH_TOKEN }}
+
+      - name: Setup Rust
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: nightly-2024-09-09
+          override: true
+
+      - name: Install wasm-pack
+        run: cargo install wasm-pack
+
+      # Setup .npmrc file to publish to npm
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          registry-url: 'https://registry.npmjs.org'
+
+      - run: npm run build
+        working-directory: ./human/human-network-sdk
+      - run: npm publish --access public
+        working-directory: ./human/human-network-sdk
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.HUMAN_TECH_NPM_TOKEN }}

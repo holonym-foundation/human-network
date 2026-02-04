@@ -1,0 +1,12 @@
+[package]
+name = "rpc_trait"
+version = "0.1.0"
+edition = "2021"
+
+
+[dependencies]
+jsonrpsee = { workspace = true }
+async-trait = { workspace = true }
+messages = { workspace = true }
+tracing = { workspace = true }
+libp2p = { workspace = true }
