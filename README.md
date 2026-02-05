@@ -1,5 +1,6 @@
-# Network
-## About Human Network
+![human-tech-banner](https://cdn.jsdelivr.net/gh/humantech-collective/brand@b9496cf98d63e10f2cdd9b0dce2563e6e586d1e9/banners/1500x500_banner-002_twitter_human-tech.png)
+# Human Network
+## About
 Human Network is a "blind", decentralized elliptic curve point by scalar multipication network. It acts as a decentralized base layer for protocols that require threshold scalar multiplication. It simply multiplies an input point, which can be information-theoretically masked, by a private key shared by the network. Standard threshold cryptography is used to ensure that no node can see the private key unless a sufficient fraction of the network is compromised.
 
 ## Use cases
