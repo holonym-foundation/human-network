@@ -1,0 +1,28 @@
+[package]
+name = "network"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+local_test_net = [] 
+
+[dependencies]
+libp2p = { workspace = true }
+serde = { workspace = true }
+tokio = { workspace = true }
+rand = { workspace = true }
+rand_chacha = { workspace = true }
+serde_json = { workspace = true }
+messages = { workspace = true }
+hex = { workspace = true }
+rsa = { workspace = true }
+log = { workspace = true }
+tracing = { workspace = true }
+ethers = { workspace = true }
+num-bigint = { workspace = true }
+human-crypto = { workspace = true }
+sha2  = { workspace = true }
+env  = { workspace = true }
+secp256k1 = { version = "0.29.0", features = ["rand"] }

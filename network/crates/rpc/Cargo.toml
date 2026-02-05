@@ -1,0 +1,19 @@
+[package]
+name = "rpc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+jsonrpsee = { workspace = true }
+async-trait = { workspace = true }
+human-crypto = { workspace =true }
+messages = { workspace = true }
+tracing = { workspace = true }
+actors = { workspace = true }
+ractor = { workspace = true }
+tokio = { workspace = true }
+rpc_trait = { workspace = true }
+lazy_static = { workspace = true }
+libp2p ={ workspace = true }
+pubsub-rs ={ workspace = true }
+uuid  = { workspace = true }

@@ -1,0 +1,7 @@
+/target
+**/*.rs.bk
+Cargo.lock
+bin/
+# We want to include the contents of pkg in what gets published to npm
+# pkg/
+wasm-pack.log

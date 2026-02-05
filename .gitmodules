@@ -1,0 +1,9 @@
+[submodule "contracts/lib/forge-std"]
+	path = contracts/lib/forge-std
+	url = https://github.com/foundry-rs/forge-std
+[submodule "vole-zk-prover"]
+	path = vole-zk-prover
+	url = https://github.com/holonym-foundation/vole-zk-prover.git
+[submodule "mishti-smart-contracts"]
+	path = mishti-smart-contracts
+	url = https://github.com/holonym-foundation/mishti-smart-contracts

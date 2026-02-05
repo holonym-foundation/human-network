@@ -1,0 +1,51 @@
+[package]
+name = "human-crypto"
+version = "0.1.0"
+edition = "2021"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+argon2 = "0.5.1"
+bcrypt = { workspace = true }
+blake2 = { workspace = true }
+k256 = { workspace = true }
+num-bigint = { workspace = true }
+rand = { workspace = true }
+rand_core ={ workspace = true }
+getrandom = { workspace = true }
+wasm-bindgen = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+ff = { workspace = true }
+num-traits = { workspace = true }
+rsa = { workspace = true }
+byteorder = { workspace = true }
+rand_chacha = { workspace = true }
+ethers = { workspace = true }
+bincode = { workspace = true }
+anyhow = { workspace = true }
+dotenv = { workspace = true }
+hex = { workspace = true }
+futures = { workspace = true }
+itertools = { workspace = true }
+clap = { workspace = true }
+ark-ed-on-bn254 = { workspace = true }
+ark-ec = { workspace = true }
+ark-ff = { workspace = true }
+ark-std = { workspace = true }
+ark-serialize = { workspace = true }
+bytemuck = { workspace = true }
+lazy_static = { workspace = true }
+hmac = { workspace = true }
+sha2 = { workspace = true }
+sha3 = { workspace = true }
+tracing = { workspace = true }
+thiserror = { workspace = true }
+base64 = "0.22.1"
+
+[features]
+testnet_logging = []
+enable_credits_for_tests = []
+mock_credits = []

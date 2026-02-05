@@ -1,0 +1,29 @@
+[package]
+name = "ingester"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+messages = { workspace = true }
+tokio ={ workspace = true }
+futures = { workspace = true }
+dotenv ={ workspace = true }
+tracing = { workspace = true}
+rdkafka = { workspace = true }
+tracing-subscriber = { workspace = true }
+serde_json = { workspace = true }
+serde = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+alloy = { workspace = true }
+alloy-sol-types = { workspace = true }
+reqwest = { workspace = true }
+lru_time_cache = { workspace = true }
+diesel = { version = "2.2.12", features = ["postgres", "chrono", "numeric", "r2d2"] }
+diesel_migrations = "2.2.0"
+chrono = { version = "0.4.41", features = ["serde"] }
+bigdecimal = { version = "0.4.8", features = ["serde"] }
+axum = "0.8.4"
+tower-http = { version = "0.5.2", features = ["cors", "trace"]}
+http = "1.1.0"
+rustls = { version = "0.23", default-features = false, features = ["aws_lc_rs"] }

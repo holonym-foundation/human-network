@@ -1,0 +1,21 @@
+[package]
+name = "cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+serde = { workspace =true }
+clap = {workspace =true }
+ethers = { workspace =true }
+human-crypto = { workspace =true }
+tokio = { workspace = true }
+rpc = { workspace = true }
+rpc_trait = { workspace = true }
+jsonrpsee ={ workspace = true }
+messages = { workspace = true }
+k256 = { workspace = true }
+bincode = { workspace = true }
+ark-ed-on-bn254 = { workspace =true }
+hex = { workspace = true }
+lazy_static = { workspace = true }
+serde_json.workspace = true

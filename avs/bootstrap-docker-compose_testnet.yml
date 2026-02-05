@@ -1,0 +1,113 @@
+x-operator: &operator
+  image: humannetwork/operator:test
+  env_file: .env
+
+x-othentic-cli: &othentic-cli
+  <<: *operator
+  env_file: .env
+  entrypoint: othentic-cli
+
+# Define a custom network with a subnet
+networks:
+  human_network:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16 # Define a subnet for the network  
+
+services:
+  redis:
+    image: redis:latest
+    container_name: redis_server
+    volumes:
+      - ./redis_data:/data # Persist Redis data
+    ports:
+      - 6379:6379
+    networks:
+      human_network:
+        ipv4_address: 172.28.0.5 # Static IP for Redis
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "10"
+        max-size: "20m" # file size
+
+  bootstrap:
+    <<: *operator
+    container_name: bootstrap
+    command: >
+      sh -c "sleep 2; \ ./human_node --bootstrap-peer-id ${BOOTSTRAP_PEER_ID} --bootstrap-multiaddr ${BOOTSTRAP_MULTIADDR} --relay-peer-id ${RELAY_PEER_ID} --relay-multiaddr ${RELAY_MULTIADDR} --port ${TCP_PORT:-8080} --redis redis://172.28.0.5:6379/0 | bunyan"
+    ports:
+      - "${TCP_PORT}:${TCP_PORT}" # TCP
+      - "${UDP_PORT}:${UDP_PORT}/udp" # UDP, matching docker run
+    environment:
+      - BOOTSTRAP_PEER_ID=${BOOTSTRAP_PEER_ID}
+      - BOOTSTRAP_MULTIADDR=${BOOTSTRAP_MULTIADDR}
+      - RELAY_PEER_ID=${RELAY_PEER_ID}
+      - RELAY_MULTIADDR=${RELAY_MULTIADDR}
+      - TCP_PORT=${TCP_PORT}
+      - UDP_PORT=${UDP_PORT}
+      - RSA_SEED=${RSA_SEED}
+      - SECP256K1_SEED=${SECP256K1_SEED}
+      - NODE_TYPE=${NODE_TYPE}
+      - NODE_MULTIADDR=${NODE_MULTIADDR}
+    restart: always
+    volumes:
+      - ./node_state:/state
+    networks:
+      human_network:
+        ipv4_address: 172.28.0.10 # Static IP for relay
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "10"
+        max-size: "20m" # file size
+
+  aggregator:
+    <<: *othentic-cli
+    container_name: aggregator
+    command:
+      [
+        "node",
+        "aggregator",
+        "--json-rpc",
+        # Enable custom messaging if needed
+      # "--json-rpc.custom-message-enabled",
+        "--l1-chain",
+        "holesky",
+        # Set the L2 chain
+        "--l2-chain",
+        "amoy",
+        "--internal-tasks",
+        # sync interval is deprecated use the env
+        # INTERNAL_TASKS=`[{"name":"VOTING_POWER_SYNC","interval": 5400000},{"name": "VOTING_POWER_PER_TASK_DEFINITION_SYNC", "interval": 5700000}]`
+        # "--sync-interval",
+        # "5400000",
+        "--metrics",
+        "--p2p.datadir",
+        "data/peerstore/aggregator",
+        "--announced-addresses",
+        # Replace with the actual ip and the peer id of the aggregator (check note for this)
+        "/ip4/34.229.78.54/tcp/9876/p2p/12D3KooWCvMcbwgVsf6TgCGLN5o64WBWrJnuZLJYizy4hHkRAma5",
+        "--delay",
+        # waits for 1.5 seconds before submitting the task
+        "1500"
+      ]
+    environment:
+      - AVS_GOVERNANCE_ADDRESS=${AVS_GOVERNANCE_ADDRESS}
+      - ATTESTATION_CENTER_ADDRESS=${ATTESTATION_CENTER_ADDRESS}
+      - PRIVATE_KEY_AGGREGATOR=${PRIVATE_KEY_AGGREGATOR}
+      - LOG_DIR=data/logs/aggregator
+      - AGGREGATOR_PORT_RPC=${AGGREGATOR_PORT_RPC}
+      - AGGREGATOR_PORT_P2P=${AGGREGATOR_PORT_P2P}
+    volumes:
+      - ./data/peerstore/aggregator:/app/data/peerstore/aggregator
+      - ./data/logs/aggregator:/app/data/logs/aggregator
+    ports:
+      - "${AGGREGATOR_PORT_RPC:-8545}:8545"
+      - "${AGGREGATOR_PORT_P2P:-9876}:9876"
+    logging:
+      driver: "json-file"
+      options:
+        max-file: "10"
+        max-size: "20m"

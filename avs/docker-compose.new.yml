@@ -1,0 +1,306 @@
+x-operator: &operator
+  image: humannetwork/operator:test
+  env_file: .env
+
+x-othentic-cli: &othentic-cli
+  <<: *operator
+  env_file: .env
+  entrypoint: othentic-cli
+
+# x-standard-config: &standard-config
+#   THRESHOLD_T: 4
+#   THRESHOLD_N: 6
+#   THRESHOLD_EPSILON: 1
+#   TESTNET_LOGGING_URL: http://10.8.0.22:3001/
+#   HUMAN_NODE_TEST_MODE: "true"
+
+x-verifier: &verifier
+  build:
+    context: ..
+    dockerfile: ./Dockerfile
+    args:
+      - LOCAL_TEST_NET=true
+  env_file: .env
+  command: ["sh", "-c", "redis-server --daemonize yes; ./verifier"]
+
+services:
+  # For sharing all logs to the the same place for test purposes
+  # testnet-logs:
+  #   <<: *operator
+  #   command: ["sh", "-c", "redis-server --daemonize yes; ./testnet_logging"]
+  #   ports:
+  #     - "3001"
+  #   networks: 
+  #     p2p:
+  #       ipv4_address: 10.8.0.22
+
+  # Sequence of serivces to be started
+  # 1. Anvil node (so that we can deploy PeerRegistry)
+  # 2. Register Bootstrap and Relay nodes with PeerRegistry (so that
+  #    all nodes can read each of these node's metadata)
+  # 3. Register Prover nodes with PeerRegistry so that Relay node can
+  #    commence DKG when it starts.
+  # 4. Start Bootstrap and Relay nodes
+  # 5. Start all other nodes
+
+  # Local EVM blockchain, with the smart contracts deployed
+  anvil-node:
+    build:
+      context: ..
+      dockerfile: ./anvil.Dockerfile
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.100
+    ports:
+      - "8540:8540"
+    healthcheck:
+      # Wait for PeerRegistry to be deployed
+      test: ["CMD", "curl", "-X", "POST", "http://localhost:8540", "-H", "Content-Type: application/json", "-d", "'{\"jsonrpc\":\"2.0\",\"method\":\"eth_getCode\",\"params\":[\"0x5FbDB2315678afecb367f032d93F642f64180aa3\",\"latest\"],\"id\":1}'\"]"]
+      interval: 3s
+      timeout: 5s
+      retries: 3
+
+  register-nodes:
+    depends_on:
+      anvil-node:
+        condition: service_healthy
+    <<: *operator
+    command: >
+      sh -c
+      "echo 'Registering Bootstrap node...'; \
+      RSA_SEED=d9d0814e23e839bcadb01dfb49c8e9e0cdce6ba82584d284c2a1518f97cc447c \
+      SECP256K1_SEED=2130bd591c08948c38a391a92621c0f23268a5683e55c296956158eb981614fe \ 
+      NODE_TYPE=Bootstrap \
+      NODE_MULTIADDR=/ip4/10.8.0.101/udp/8080/quic-v1 \
+      ./registry_iface register --rpc-url http://10.8.0.100:8540 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 --multiaddr /ip4/10.8.0.101/udp/8080/quic-v1 --rpcaddr http://10.8.0.101:8080 --test true; \
+      
+      echo 'Registering Relay node...'; \
+      RSA_SEED=46566c7aee67c77d3608e5fc5cafbd716c027c8c7da7bf409fed0ff6af48959e \
+      SECP256K1_SEED=0a4f66e0189bf85d5fd2f1f3b67a736a0d5ae577d6b24aa9d62021c3062a8d18 \ 
+      NODE_TYPE=Relay \
+      NODE_MULTIADDR=/ip4/10.8.0.102/udp/8081/quic-v1 \
+      ./registry_iface register --rpc-url http://10.8.0.100:8540 --private-key 0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d --multiaddr /ip4/10.8.0.102/udp/8081/quic-v1 --rpcaddr http://10.8.0.102:8081 --test true; \
+      
+      echo 'Registering Prover 1...'; \
+      RSA_SEED=dcf210c787b8ff4b3006213df20dd0981e3bc0711197e05cb62cbb4290a8ab0c \
+      SECP256K1_SEED=26b6bb53f22c62baa4aa99b275ea17010dedfe124eb3c0851e3af96ba4faf2e8 \
+      NODE_TYPE=Prover \
+      NODE_MULTIADDR=/ip4/10.8.0.103/udp/8082/quic-v1 \
+      ./registry_iface register --rpc-url http://10.8.0.100:8540 --private-key 0x5de4111afa1a4b94908f83103eb1f1706367c2e68ca870fc3fb9a804cdab365a --multiaddr /ip4/10.8.0.103/udp/8082/quic-v1 --rpcaddr http://10.8.0.103:8082 --test true &  \
+
+      echo 'Registering Prover 2...'; \
+      RSA_SEED=ec9e43ea19bb3cb0e6bd1b90ae26818311e6509efd2c384b21a7a25ddba8c7fb \
+      SECP256K1_SEED=32ee679683f45e1c96aab685bd3c9029e156f80f221b05e60493fb048052ee6c \
+      NODE_TYPE=Prover \
+      NODE_MULTIADDR=/ip4/10.8.0.104/udp/8083/quic-v1 \
+      ./registry_iface register --rpc-url http://10.8.0.100:8540 --private-key 0x7c852118294e51e653712a81e05800f419141751be58f605c371e15141b007a6 --multiaddr /ip4/10.8.0.104/udp/8083/quic-v1 --rpcaddr http://10.8.0.104:8083 --test true & \
+
+      echo 'Registering Prover 3...'; \
+      RSA_SEED=75bfc6043cc6896f0f82bff460abd7cb540c2ea32bb581fbc7f01c4b65a6e81e \
+      SECP256K1_SEED=7f9ca45079877f1c23745fb2343902ee94e00f8d8f02c515aba7a1433d8f1125 \
+      NODE_TYPE=Prover \
+      NODE_MULTIADDR=/ip4/10.8.0.105/udp/8084/quic-v1 \
+      ./registry_iface register --rpc-url http://10.8.0.100:8540 --private-key 0x47e179ec197488593b187f80a00eb0da91f1b9d0b13f8733639f19c30a34926a --multiaddr /ip4/10.8.0.105/udp/8084/quic-v1 --rpcaddr http://10.8.0.105:8084 --test true & \
+      wait; echo Done registering nodes"
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.101
+
+  bootstrap:
+    depends_on:
+      register-nodes:
+        condition: service_completed_successfully
+    <<: *operator
+    command: >
+      sh -c 
+      "redis-server --daemonize yes; \ 
+      sleep 2; \
+      ./human_node --bootstrap-peer-id $(node ./scripts/test/get-peer-id.js 0 http://10.8.0.100:8540) --bootstrap-multiaddr /ip4/10.8.0.101/udp/8080/quic-v1 --relay-peer-id $(node ./scripts/test/get-peer-id.js 1 http://10.8.0.100:8540) --relay-multiaddr /ip4/10.8.0.102/udp/8081/quic-v1 --port 8080 --redis redis://127.0.0.1:6379/0 | bunyan"
+    ports: 
+      - "8080"
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.101
+    environment:
+      - RSA_SEED=d9d0814e23e839bcadb01dfb49c8e9e0cdce6ba82584d284c2a1518f97cc447c
+      - SECP256K1_SEED=2130bd591c08948c38a391a92621c0f23268a5683e55c296956158eb981614fe
+      - NODE_TYPE=Bootstrap
+      - NODE_MULTIADDR=/ip4/10.8.0.101/udp/8080/quic-v1
+
+  relay:
+    depends_on:
+      - bootstrap
+    <<: *operator
+    command: >
+      sh -c
+      "redis-server --daemonize yes; \
+      sleep 4; \
+      ./human_node --bootstrap-peer-id $(node ./scripts/test/get-peer-id.js 0 http://10.8.0.100:8540) --bootstrap-multiaddr /ip4/10.8.0.101/udp/8080/quic-v1 --relay-peer-id $(node ./scripts/test/get-peer-id.js 1 http://10.8.0.100:8540) --relay-multiaddr /ip4/10.8.0.102/udp/8081/quic-v1 --port 8081 --redis redis://127.0.0.1:6379/1 | bunyan"
+    ports: 
+      - "8081:8081"
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.102
+    environment:
+      - RSA_SEED=46566c7aee67c77d3608e5fc5cafbd716c027c8c7da7bf409fed0ff6af48959e
+      - SECP256K1_SEED=0a4f66e0189bf85d5fd2f1f3b67a736a0d5ae577d6b24aa9d62021c3062a8d18
+      - NODE_TYPE=Relay
+      - NODE_MULTIADDR=/ip4/10.8.0.102/udp/8081/quic-v1
+
+  prover-1: 
+    depends_on:
+      - relay
+    <<: *operator
+    command: >
+      sh -c
+      "redis-server --daemonize yes; \
+      ./human_node --bootstrap-peer-id $(node ./scripts/test/get-peer-id.js 0 http://10.8.0.100:8540) --bootstrap-multiaddr /ip4/10.8.0.101/udp/8080/quic-v1 --relay-peer-id $(node ./scripts/test/get-peer-id.js 1 http://10.8.0.100:8540) --relay-multiaddr /ip4/10.8.0.102/udp/8081/quic-v1 --port 8082 --redis redis://127.0.0.1:6379/2 | bunyan"
+    ports: 
+      - "8082"
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.103
+    environment:
+      - RSA_SEED=dcf210c787b8ff4b3006213df20dd0981e3bc0711197e05cb62cbb4290a8ab0c
+      - SECP256K1_SEED=26b6bb53f22c62baa4aa99b275ea17010dedfe124eb3c0851e3af96ba4faf2e8
+      - NODE_TYPE=Prover
+      - NODE_MULTIADDR=/ip4/10.8.0.103/udp/8082/quic-v1
+
+  prover-2: 
+    depends_on:
+      - relay
+    <<: *operator
+    command: >
+      sh -c
+      "redis-server --daemonize yes; \
+      ./human_node --bootstrap-peer-id $(node ./scripts/test/get-peer-id.js 0 http://10.8.0.100:8540) --bootstrap-multiaddr /ip4/10.8.0.101/udp/8080/quic-v1 --relay-peer-id $(node ./scripts/test/get-peer-id.js 1 http://10.8.0.100:8540) --relay-multiaddr /ip4/10.8.0.102/udp/8081/quic-v1 --port 8083 --redis redis://127.0.0.1:6379/3 | bunyan"
+    ports: 
+      - "8083"
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.104
+    environment:
+      - RSA_SEED=ec9e43ea19bb3cb0e6bd1b90ae26818311e6509efd2c384b21a7a25ddba8c7fb
+      - SECP256K1_SEED=32ee679683f45e1c96aab685bd3c9029e156f80f221b05e60493fb048052ee6c
+      - NODE_TYPE=Prover
+      - NODE_MULTIADDR=/ip4/10.8.0.104/udp/8083/quic-v1
+
+  prover-3: 
+    depends_on:
+      - relay
+    <<: *operator
+    command: >
+      sh -c
+      "redis-server --daemonize yes; \
+      ./human_node --bootstrap-peer-id $(node ./scripts/test/get-peer-id.js 0 http://10.8.0.100:8540) --bootstrap-multiaddr /ip4/10.8.0.101/udp/8080/quic-v1 --relay-peer-id $(node ./scripts/test/get-peer-id.js 1 http://10.8.0.100:8540) --relay-multiaddr /ip4/10.8.0.102/udp/8081/quic-v1 --port 8084 --redis redis://127.0.0.1:6379/4 | bunyan"
+    ports: 
+      - "8084"
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.105
+    environment:
+      - RSA_SEED=75bfc6043cc6896f0f82bff460abd7cb540c2ea32bb581fbc7f01c4b65a6e81e
+      - SECP256K1_SEED=7f9ca45079877f1c23745fb2343902ee94e00f8d8f02c515aba7a1433d8f1125
+      - NODE_TYPE=Prover
+      - NODE_MULTIADDR=/ip4/10.8.0.105/udp/8084/quic-v1
+
+  avswebapi-1:
+    <<: *verifier
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.41
+  avswebapi-2:
+    <<: *verifier
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.42
+  avswebapi-3:
+    <<: *verifier
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.43
+        
+
+  aggregator:
+    <<: *othentic-cli
+    command: ["node", "aggregator", "--json-rpc"]
+    ports:
+      - "8545:8545"
+      - "9876:9876"
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.69
+  attester-1:
+    <<: *othentic-cli
+    command: [
+      "node",
+      "attester",
+      "/ip4/10.8.0.69/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
+      "--avs-webapi",
+      "http://10.8.0.41",
+    ]
+    environment:
+      - PRIVATE_KEY=${PRIVATE_KEY_VALIDATOR1}
+    depends_on:
+      aggregator:
+        condition: service_started
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.11
+  attester-2:
+    <<: *othentic-cli
+    command: [
+      "node",
+      "attester",
+      "/ip4/10.8.0.69/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
+      "--avs-webapi",
+      "http://10.8.0.42",
+    ]
+    environment:
+      - PRIVATE_KEY=${PRIVATE_KEY_VALIDATOR2}
+    depends_on:
+      aggregator:
+        condition: service_started
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.12
+  attester-3:
+    <<: *othentic-cli
+    command: [
+      "node",
+      "attester",
+      "/ip4/10.8.0.69/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}",
+      "--avs-webapi",
+      "http://10.8.0.43",
+    ]
+    environment:
+      - PRIVATE_KEY=${PRIVATE_KEY_VALIDATOR3}
+    depends_on:
+      aggregator:
+        condition: service_started
+    networks:
+      p2p:
+        ipv4_address: 10.8.0.13
+  # for sponsoring user transactions to Human Network
+  # signer:
+  #   depends_on:
+  #     - relay
+  #   build:
+  #     context: ..
+  #     dockerfile: ./test-node.Dockerfile
+  #   env_file: .env
+  #   environment:
+  #     - HUMAN_RPC_URL=http://10.8.0.102:8081
+  #   command: ["sh", "-c", "redis-server --daemonize yes; ./signer"]
+  #   ports:
+  #     - "3030:3000"
+  #   networks:
+  #     p2p:
+  #       ipv4_address: 10.8.0.200
+
+networks:
+  p2p:
+    driver: bridge
+    ipam:
+     config:
+       - subnet: 10.8.0.0/16
