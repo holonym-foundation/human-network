@@ -4,21 +4,19 @@ use crate::{
     PgPool,
 };
 use alloy::{
-    primitives::{Address, B256, U256},
+    primitives::{Address, B256, Bytes, U256},
     providers::{
-        fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller},
-        Identity, Provider, ProviderBuilder, RootProvider, WsConnect,
+        Identity, Provider, ProviderBuilder, RootProvider, WsConnect, fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller}
     },
     rpc::types::BlockNumberOrTag,
     sol,
 };
-use alloy_sol_types::SolEvent;
+use alloy_sol_types::{SolEvent, SolType};
 use chrono::Utc;
 use diesel::prelude::*;
 use diesel::result::Error as DieselError;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
-use serde_json::from_str;
 use std::{collections::HashMap, env, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout};
@@ -35,7 +33,10 @@ sol!(
             uint16 indexed taskDefinitionId,
             uint256[] attestersIds
         );
-
+        struct TaskData {
+            uint256 task_size;
+            address[] performers;
+        }
         // Define the function from the smart contract that returns operator details
         function getActiveOperatorsDetails() external view returns (OperatorDetails[] memory _operators);
     }
@@ -53,7 +54,7 @@ pub struct TaskSubmittedEvent {
     pub operator: Address,
     pub task_number: u32,
     pub proof_of_task: String,
-    pub data: String,
+    pub data: Bytes,
     pub task_size: usize,
     pub performers: Vec<Address>, // Populated from the `performers` field in the JSON data
     pub task_definition_id: u16,
@@ -74,15 +75,11 @@ impl TaskSubmittedEvent {
     pub fn from_log(log: &alloy::rpc::types::Log) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let prim_log: alloy::primitives::Log = log.clone().into();
         let decoded = AttestationCenter::TaskSubmitted::decode_log(&prim_log, true)?;
-
-        // Decode the `data` field from bytes to a UTF-8 string.
-        let data_string = std::str::from_utf8(&decoded.data.data).unwrap_or_default().to_string();
-
         Ok(Self {
             operator: decoded.operator,
             task_number: decoded.taskNumber,
             proof_of_task: decoded.proofOfTask.clone(),
-            data: data_string,
+            data: decoded.data.data.clone(),
             // These fields will be populated in `process_log` after async calls
             task_size: 0,
             performers: Vec::new(),
@@ -317,9 +314,9 @@ impl ContractEventMonitor {
             return Ok(());
         }
         // 1. Decode the JSON data from the `data` field and populate `task_size` and `performers`
-        match from_str::<TaskData>(&event.data) {
+        match AttestationCenter::TaskData::abi_decode(&event.data, true) {
             Ok(task_data) => {
-                event.task_size = task_data.task_size;
+                event.task_size = task_data.task_size.to::<usize>();
                 event.performers = task_data.performers;
                 info!("Decoded task size: {} and performers from JSON.", event.task_size);
             }
