@@ -33,10 +33,10 @@ RUN apt update && apt install -y \
 WORKDIR /project
 
 # Copy your Rust project source code
-COPY ./human ./human
+COPY ./network ./network
 
 # Change to the project's specific directory
-WORKDIR /project/human
+WORKDIR /project/network
 
 # Define the build argument (if needed for your project logic)
 ARG LOCAL_TEST_NET=false
@@ -69,7 +69,7 @@ RUN apt update && apt install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy the compiled binary from the builder stage
-COPY --from=builder /project/human/target/release/ingester /
+COPY --from=builder /project/network/target/release/ingester /
 
 # Set the command to run when the container starts
 CMD ["/ingester"]

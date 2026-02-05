@@ -15,8 +15,8 @@
 # # COPY ./scalar-mul-core/. .
 
 # COPY ./vole-zk-prover ./vole-zk-prover
-# COPY ./human ./human
-# WORKDIR ./human
+# COPY ./network ./network
+# WORKDIR ./network
 # # # For faster compiles and debugging but slower running:
 # # # RUN #--release
 # # RUN CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse cargo build --bin verifier --features "testnet_logging mock_credits" #--release
@@ -54,10 +54,10 @@
 # # COPY --from=builder /project/target/debug/relayer ./relayer
 # # COPY --from=builder /project/target/debug/testnet_logging ./testnet_logging
 # # For production
-# COPY --from=builder /project/human/target/release/prover ./prover
-# COPY --from=builder /project/human/target/release/verifier ./verifier
-# COPY --from=builder /project/human/target/release/relayer ./relayer
-# COPY --from=builder /project/human/target/release/testnet_logging ./testnet_logging
+# COPY --from=builder /project/network/target/release/prover ./prover
+# COPY --from=builder /project/network/target/release/verifier ./verifier
+# COPY --from=builder /project/network/target/release/relayer ./relayer
+# COPY --from=builder /project/network/target/release/testnet_logging ./testnet_logging
 
 
 
@@ -79,8 +79,8 @@ WORKDIR /project
 RUN cargo install bunyan
 
 COPY ./vole-zk-prover ./vole-zk-prover
-COPY ./human ./human
-WORKDIR ./human
+COPY ./network ./network
+WORKDIR ./network
 
 # Define the build argument
 ARG LOCAL_TEST_NET=false
@@ -112,15 +112,15 @@ RUN npm i -g @libp2p/autonat
 RUN apt install redis-server -y
 
 # For faster compiles and debugging but slower running:
-# COPY --from=builder /project/human/target/debug/human_node ./human_node
-# COPY --from=builder /project/human/target/debug/registry_iface ./registry_iface
-# COPY --from=builder /project/human/target/debug/verifier ./verifier
+# COPY --from=builder /project/network/target/debug/human_node ./network_node
+# COPY --from=builder /project/network/target/debug/registry_iface ./registry_iface
+# COPY --from=builder /project/network/target/debug/verifier ./verifier
 # For production
-COPY --from=builder /project/human/target/release/human_node ./human_node
-COPY --from=builder /project/human/target/release/registry_iface ./registry_iface
-COPY --from=builder /project/human/target/release/signer ./signer
-COPY --from=builder /project/human/target/release/verifier ./verifier
-COPY --from=builder /project/human/target/release/cli ./cli
+COPY --from=builder /project/network/target/release/human_node ./network_node
+COPY --from=builder /project/network/target/release/registry_iface ./registry_iface
+COPY --from=builder /project/network/target/release/signer ./signer
+COPY --from=builder /project/network/target/release/verifier ./verifier
+COPY --from=builder /project/network/target/release/cli ./cli
 
 COPY --from=builder /usr/local/cargo/bin/bunyan /usr/bin/bunyan
 

@@ -4,12 +4,12 @@ on:
   push:
     paths: [
       '.github/workflows/publish-human-network-sdk.yml', 
-      'human/human-network-sdk/package.json'
+      'network/human-network-sdk/package.json'
     ]
   pull_request:
     paths:
       - '.github/workflows/publish-human-network-sdk.yml'
-      - 'human/human-network-sdk/package.json'
+      - 'network/human-network-sdk/package.json'
 
 permissions:
   id-token: write # This is required for requesting the JWT
@@ -44,8 +44,8 @@ jobs:
           registry-url: 'https://registry.npmjs.org'
 
       - run: npm run build
-        working-directory: ./human/human-network-sdk
+        working-directory: ./network/human-network-sdk
       - run: npm publish --access public
-        working-directory: ./human/human-network-sdk
+        working-directory: ./network/human-network-sdk
         env:
           NODE_AUTH_TOKEN: ${{ secrets.HUMAN_TECH_NPM_TOKEN }}

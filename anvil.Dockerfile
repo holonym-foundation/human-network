@@ -23,9 +23,9 @@ RUN rustup default nightly
 RUN apt update && apt install cmake pkg-config libssl-dev build-essential -y
 
 COPY ./vole-zk-prover ./vole-zk-prover
-COPY ./human /human
+COPY ./network /network
 
-WORKDIR /human
+WORKDIR /network
 
 RUN cargo build --package registry_iface --bin registry_iface
 
@@ -47,7 +47,7 @@ COPY ./scripts/test/ /app/scripts/test/
 
 # Because we want the register_peers script to work both with and without docker, we 
 # want to preserve the folder structure here.
-COPY --from=human_builder /human/target/debug/registry_iface /app/human/target/debug/registry_iface
+COPY --from=human_builder /network/target/debug/registry_iface /app/network/target/debug/registry_iface
 
 RUN chmod +x /app/scripts/test/anvil_entrypoint.sh
 

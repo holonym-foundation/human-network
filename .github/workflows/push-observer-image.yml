@@ -5,7 +5,7 @@ on:
     paths: [
       '.github/workflows/push-observer-image.yml', 
       'observer.Dockerfile',
-      'human/crates/observer/**'
+      'network/crates/observer/**'
     ]
 
 permissions:

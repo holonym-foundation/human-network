@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Command parameters
-BINARY="./human/target/release/cli"
+BINARY="./network/target/release/cli"
 INPUT="usr:123"
 PRIVATE_KEY="${TEST_PRIVATE_KEY:-your-test-private-key-here}"
 METHOD="OPRFBabyJubJub"

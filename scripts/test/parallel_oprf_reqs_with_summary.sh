@@ -28,7 +28,7 @@ for i in $(seq 1 "$TOTAL_ITERATIONS"); do
 
   # Construct the command with the generated values
   rpc_url="${TEST_RPC_URL:-http://localhost:8081}"
-  command="RUST_LOG=INFO ./human/target/release/cli --input \"$random_input\" --private-key $random_private_key --method OPRFBabyJubJub --rpc-url \"$rpc_url\""
+  command="RUST_LOG=INFO ./network/target/release/cli --input \"$random_input\" --private-key $random_private_key --method OPRFBabyJubJub --rpc-url \"$rpc_url\""
 
   # Wait if the number of running jobs reaches the configured limit
   while [[ ${#running_pids[@]} -ge "$PARALLEL_JOBS" ]] && [[ ${#running_pids[@]} -gt 0 ]]; do

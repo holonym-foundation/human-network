@@ -3,7 +3,7 @@ const util = require('node:util');
 const exec = util.promisify(require('node:child_process').exec);
 
 const script_path = __dirname;
-const keypair_names_path = `${script_path}/../../human/test_keypairs/keypair_names.json`;
+const keypair_names_path = `${script_path}/../../network/test_keypairs/keypair_names.json`;
 
 const keypair_names = JSON.parse(fs.readFileSync(keypair_names_path));
 
