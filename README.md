@@ -194,4 +194,4 @@ After cloning this repo, if vole-zk-prover (i.e., volonym) is a dependency of on
 
 # Smart contracts
 
-https://github.com/holonym-foundation/human-smart-contracts
+https://github.com/holonym-foundation/mishti-smart-contracts
