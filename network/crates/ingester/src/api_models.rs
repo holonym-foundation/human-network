@@ -117,6 +117,7 @@ pub struct TaskResponse {
 #[derive(Debug, Serialize)]
 pub struct TotalNetworkTvl {
     pub tvl_usd: f64,
+    pub warnings: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]

@@ -12,7 +12,8 @@ use diesel::sql_types::Timestamptz;
 use tracing::{error, info, instrument, warn};
 
 use crate::api_models::{
-    ApiResponse, CmcResponse, CurrentQuorumResponse, EigenResponse, KeyCount, KeysGeneratedChartData, MultiplierComputedRequests, MultiplierQuorumElections, OperatorPointsResponse, PaginatedResponse, PeerReachabilityStatus, QuorumElectionResponse, QuorumMemberResponse, RequestResponse, SymbioticResponse, TaskResponse, TotalKeysGenerated, TotalNetworkTvl, UserCreditsResponse
+    ApiResponse, CmcResponse, CurrentQuorumResponse, EigenResponse, KeyCount, KeysGeneratedChartData, MultiplierComputedRequests, MultiplierQuorumElections, OperatorPointsResponse, PaginatedResponse,
+    PeerReachabilityStatus, QuorumElectionResponse, QuorumMemberResponse, RequestResponse, SymbioticResponse, TaskResponse, TotalKeysGenerated, TotalNetworkTvl, UserCreditsResponse,
 };
 use crate::models::{MultiplierInfo, PeerReachabilityQuic, PeerReachabilityTcp, QuorumResharingInfoDb, Requests, Task, TaskAttestors, TaskPerformers, UserCredits};
 use crate::schema::{
@@ -194,7 +195,10 @@ pub async fn get_current_quorum(State(AppState { pool, .. }): State<AppState>) -
     skip(pool),
     fields(page = %params.page, page_size = %params.page_size)
 )]
-pub async fn get_quorum_elections(State(AppState { pool, .. }): State<AppState>, Query(params): Query<PaginationParams>) -> Result<Json<ApiResponse<PaginatedResponse<QuorumElectionResponse>>>, (StatusCode, String)> {
+pub async fn get_quorum_elections(
+    State(AppState { pool, .. }): State<AppState>,
+    Query(params): Query<PaginationParams>,
+) -> Result<Json<ApiResponse<PaginatedResponse<QuorumElectionResponse>>>, (StatusCode, String)> {
     validate_pagination(&params)?;
 
     let mut conn = pool.get().map_err(|e| ApiError::DatabaseConnection(format!("Failed to get connection: {}", e)))?;
@@ -270,7 +274,10 @@ pub async fn get_quorum_elections(State(AppState { pool, .. }): State<AppState>,
     skip(pool),
     fields(page = %params.page, page_size = %params.page_size)
 )]
-pub async fn get_requests(State(AppState { pool, .. }): State<AppState>, Query(params): Query<PaginationParams>) -> Result<Json<ApiResponse<PaginatedResponse<RequestResponse>>>, (StatusCode, String)> {
+pub async fn get_requests(
+    State(AppState { pool, .. }): State<AppState>,
+    Query(params): Query<PaginationParams>,
+) -> Result<Json<ApiResponse<PaginatedResponse<RequestResponse>>>, (StatusCode, String)> {
     validate_pagination(&params)?;
 
     let mut conn = pool.get().map_err(|e| ApiError::DatabaseConnection(format!("Failed to get connection: {}", e)))?;
@@ -343,7 +350,10 @@ pub async fn get_total_keys_generated(State(AppState { pool, .. }): State<AppSta
 /// GET /api/v1/keys_generated_chart
 /// Returns the chart data for keys generated.
 #[instrument(name = "get_keys_generated_chart", skip(pool))]
-pub async fn get_keys_generated_chart(State(AppState { pool, .. }): State<AppState>, Query(params): Query<ChartTimeframeParams>) -> Result<Json<ApiResponse<KeysGeneratedChartData>>, (StatusCode, String)> {
+pub async fn get_keys_generated_chart(
+    State(AppState { pool, .. }): State<AppState>,
+    Query(params): Query<ChartTimeframeParams>,
+) -> Result<Json<ApiResponse<KeysGeneratedChartData>>, (StatusCode, String)> {
     if !params.all_time {
         validate_timeframe(&params)?;
     }
@@ -662,42 +672,67 @@ pub async fn get_tasks(State(AppState { pool, .. }): State<AppState>, Query(para
 /// Handler to display the cumulative TVL across EL and symbiotic.
 /// Optimized with concurrency and 1-day caching.
 #[instrument(name = "get_network_tvl", skip(app_state))]
-pub async fn get_network_tvl(
-    State(mut app_state): State<AppState>,
-) -> Result<Json<ApiResponse<TotalNetworkTvl>>, (StatusCode, String)> {
-    
-    // 1. Check cache first
-    // We use `()` as the key because we're only caching this single, global value.
+pub async fn get_network_tvl(State(mut app_state): State<AppState>) -> Result<Json<ApiResponse<TotalNetworkTvl>>, (StatusCode, String)> {
+    let mut warnings = Vec::new();
+
+    // 1. Check cache (Return immediately if fresh)
     if let Some(cached_tvl) = app_state.tvl_cache.get(&()) {
         info!("Returning cached TVL value");
-        return Ok(success_response(TotalNetworkTvl { tvl_usd: *cached_tvl }));
+        return Ok(success_response(TotalNetworkTvl { tvl_usd: *cached_tvl, warnings: None }));
     }
 
-    info!("Cache miss. Fetching fresh TVL values...");
-    let client = reqwest::Client::new();
-    let eigen_api_key = env::var("EIGEN_API_KEY").expect("EIGEN_API_KEY must be set");
-    let cmc_api_key = env::var("CMC_API_KEY").expect("CMC_API_KEY must be set");
-    // 2. Fetch all API data concurrently
-    let (symbiotic_result, eigen_result, cmc_result) = tokio::join!(
-        fetch_symbiotic_tvl(&client),
-        fetch_eigen_tvl(&client, &eigen_api_key),
-        fetch_eth_price(&client, &cmc_api_key)
-    );
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(8)) // Don't let one API hang the whole request
+        .build()
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
 
-    // 3. Handle results (errors will be propagated by `?`)
-    let symbiotic_restake_usd = symbiotic_result?;
-    let eigen_restake_eth = eigen_result?;
-    let cmc_eth_to_usd = cmc_result?;
+    let eigen_api_key = env::var("EIGEN_API_KEY").unwrap_or_default();
+    let cmc_api_key = env::var("CMC_API_KEY").unwrap_or_default();
 
-    // 4. Perform calculations
-    let eigen_restake_usd = eigen_restake_eth * cmc_eth_to_usd;
-    let total_restake_usd = eigen_restake_usd + symbiotic_restake_usd;
+    // 2. Concurrent Fetch
+    let (symbiotic_result, eigen_result, cmc_result) = tokio::join!(fetch_symbiotic_tvl(&client), fetch_eigen_tvl(&client, &eigen_api_key), fetch_eth_price(&client, &cmc_api_key));
 
-    // 5. Store in cache for next time
-    app_state.tvl_cache.insert((), total_restake_usd);
+    // 3. Selective Unwrapping
+    let symbiotic_usd = match symbiotic_result {
+        Ok(val) => val,
+        Err(e) => {
+            warnings.push(format!("Symbiotic data unavailable: {}", e));
+            0.0
+        }
+    };
+
+    let eigen_eth = match eigen_result {
+        Ok(val) => val,
+        Err(e) => {
+            warnings.push(format!("EigenLayer data unavailable: {}", e));
+            0.0
+        }
+    };
+
+    let eth_price = match cmc_result {
+        Ok(val) => val,
+        Err(e) => {
+            warnings.push(format!("CoinMarketCap ETH price data unavailable: {}", e));
+            0.0
+        }
+    };
+
+    // 4. Final Calculation
+    let total_restake_usd = (eigen_eth * eth_price) + symbiotic_usd;
+
+    // 5. Intelligent Caching
+    // Only update the cache if we actually got a full set of data.
+    // If warnings is NOT empty, we provide the best-effort result but don't overwrite
+    // the previous "good" cache.
+    if warnings.is_empty() {
+        app_state.tvl_cache.insert((), total_restake_usd);
+    }
+
     info!("New TVL value calculated and cached: {}", total_restake_usd);
-
-    Ok(success_response(TotalNetworkTvl { tvl_usd: total_restake_usd }))
+    Ok(success_response(TotalNetworkTvl {
+        tvl_usd: total_restake_usd,
+        warnings: Some(warnings),
+    }))
 }
 
 #[instrument(skip(client))]
@@ -735,7 +770,6 @@ async fn fetch_eth_price(client: &reqwest::Client, api_key: &str) -> Result<f64,
         .await?;
     Ok(response.data.ethereum.quote.usd.price)
 }
-
 
 #[cfg(test)]
 mod tests {
