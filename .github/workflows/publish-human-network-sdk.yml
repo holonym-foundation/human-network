@@ -29,13 +29,12 @@ jobs:
           # token: ${{ secrets.PERSONAL_GH_TOKEN }}
 
       - name: Setup Rust
-        uses: actions-rs/toolchain@v1
+        uses: dtolnay/rust-toolchain@nightly
         with:
-          toolchain: nightly-2024-09-09
-          override: true
+          targets: wasm32-unknown-unknown
 
       - name: Install wasm-pack
-        run: cargo install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       # Setup .npmrc file to publish to npm
       - uses: actions/setup-node@v4
