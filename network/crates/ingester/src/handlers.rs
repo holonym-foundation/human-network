@@ -17,8 +17,7 @@ use crate::api_models::{
 };
 use crate::models::{MultiplierInfo, PeerReachabilityQuic, PeerReachabilityTcp, QuorumResharingInfoDb, Requests, Task, TaskAttestors, TaskPerformers, UserCredits};
 use crate::schema::{
-    multiplier_info, multiplier_served_requests, operator_points_ledger, peer_reachability_quic, peer_reachability_tcp, quorum_resharing_info, requests, task_attestors, task_performers, tasks,
-    user_credits,
+    multiplier_info, multiplier_served_requests, operator_points_daily, operator_points_ledger, peer_reachability_quic, peer_reachability_tcp, quorum_resharing_info, requests, task_attestors, task_performers, tasks, user_credits
 };
 use crate::AppState;
 
@@ -601,6 +600,31 @@ pub async fn get_operator_points_v2(State(AppState { pool, .. }): State<AppState
     response_data.sort_by(|a, b| b.points.partial_cmp(&a.points).unwrap_or(std::cmp::Ordering::Equal));
 
     Ok(success_response(response_data))
+}
+
+#[instrument(name = "get_operator_points_v3", skip(pool))]
+pub async fn get_operator_points_v3(State(AppState { pool, .. }): State<AppState>) -> Result<Json<ApiResponse<Vec<OperatorPointsResponse>>>, (StatusCode, String)> {
+    let mut conn = pool.get().map_err(|e| ApiError::DatabaseConnection(e.to_string()))?;
+
+    let today_midnight = chrono::Utc::now().date_naive().and_hms_opt(0, 0, 0).unwrap().and_utc();
+
+    let results: Vec<(Vec<u8>, f64)> = operator_points_daily::table
+        .filter(operator_points_daily::snapshot_time.eq(today_midnight))
+        .select((operator_points_daily::operator, operator_points_daily::cumulative_points))
+        .load(&mut conn)
+        .map_err(|e| ApiError::DatabaseQuery(e.to_string()))?;
+
+    let mut response: Vec<OperatorPointsResponse> = results
+        .into_iter()
+        .map(|(addr, pts)| OperatorPointsResponse {
+            address: format_address(&addr),
+            points: pts,
+        })
+        .collect();
+
+    response.sort_by(|a, b| b.points.partial_cmp(&a.points).unwrap());
+
+    Ok(success_response(response))
 }
 
 #[instrument(

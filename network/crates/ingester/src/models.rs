@@ -132,6 +132,15 @@ pub struct OperatorPointsLedger {
     pub created_at: DateTime<Utc>,
 }
 
+#[derive(Queryable, Selectable, Debug)]
+#[diesel(table_name = crate::schema::operator_points_daily)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct OperatorPointsDaily {
+    operator: Vec<u8>,
+    snapshot_time: DateTime<Utc>,
+    cumulative_points: f64,
+}
+
 // --- Insertable Structs (for writing to DB) ---
 
 #[derive(Insertable, Debug)]

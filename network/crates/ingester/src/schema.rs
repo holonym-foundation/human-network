@@ -33,6 +33,14 @@ diesel::table! {
 }
 
 diesel::table! {
+    operator_points_daily (operator, snapshot_time) {
+        operator -> Bytea,
+        snapshot_time -> Timestamptz,
+        cumulative_points -> Float8,
+    }
+}
+
+diesel::table! {
     operator_points_ledger (id) {
         id -> Int8,
         operator -> Bytea,
@@ -134,6 +142,7 @@ diesel::allow_tables_to_appear_in_same_query!(
     monitor_task_state,
     multiplier_info,
     multiplier_served_requests,
+    operator_points_daily,
     operator_points_ledger,
     peer_reachability_quic,
     peer_reachability_tcp,

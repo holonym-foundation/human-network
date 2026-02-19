@@ -23,6 +23,7 @@ use crate::message_ingester::KafkaMessageIngestor;
 use crate::task_monitor::ContractEventMonitor;
 
 pub mod api_models;
+pub mod daily_points_updater;
 pub mod handlers;
 pub mod message_ingester;
 pub mod models;
@@ -262,6 +263,7 @@ async fn main() {
         .route("/tasks", get(handlers::get_tasks))
         .route("/operator_points", get(handlers::get_operator_points))
         .route("/operator_points_v2", get(handlers::get_operator_points_v2))
+        .route("/operator_points_v3", get(handlers::get_operator_points_v3))
         .route("/total_network_tvl", get(handlers::get_network_tvl));
 
     let app_state = AppState {
@@ -291,6 +293,8 @@ async fn main() {
 
     let task_ingestion_task = tokio::spawn(task_contract_txs(pool.clone()));
 
+    let daily_points_task = tokio::spawn(daily_points_updater::run_daily_points_updater(pool.clone()));
+
     // Await both tasks. If one fails, the other might continue, but we'll log the error.
     tokio::select! {
         kafka_ingestion_res = kafka_ingestion_task => {
@@ -304,6 +308,12 @@ async fn main() {
                 error!("task ingestion task failed: {:?}", e);
             }
             info!("task ingester stopped.");
+        }
+        daily_points_res = daily_points_task => {
+            if let Err(e) = daily_points_res {
+                error!("Daily updater task failed: {:?}", e);
+            }
+            info!("daily points updater task stopped.");
         }
         api_res = api_server_task => {
             if let Err(e) = api_res {
