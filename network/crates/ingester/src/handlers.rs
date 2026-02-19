@@ -8,7 +8,7 @@ use axum::Json;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use diesel::dsl::{count_distinct, sql};
 use diesel::prelude::*;
-use diesel::sql_types::Timestamptz;
+use diesel::sql_types::{Double, Timestamptz};
 use tracing::{error, info, instrument, warn};
 
 use crate::api_models::{
@@ -17,7 +17,8 @@ use crate::api_models::{
 };
 use crate::models::{MultiplierInfo, PeerReachabilityQuic, PeerReachabilityTcp, QuorumResharingInfoDb, Requests, Task, TaskAttestors, TaskPerformers, UserCredits};
 use crate::schema::{
-    multiplier_info, multiplier_served_requests, peer_reachability_quic, peer_reachability_tcp, quorum_resharing_info, requests, task_attestors, task_performers, tasks, user_credits,
+    multiplier_info, multiplier_served_requests, operator_points_ledger, peer_reachability_quic, peer_reachability_tcp, quorum_resharing_info, requests, task_attestors, task_performers, tasks,
+    user_credits,
 };
 use crate::AppState;
 
@@ -570,6 +571,33 @@ pub async fn get_operator_points(State(AppState { pool, .. }): State<AppState>) 
         .collect();
 
     // Sort for a consistent output
+    response_data.sort_by(|a, b| b.points.partial_cmp(&a.points).unwrap_or(std::cmp::Ordering::Equal));
+
+    Ok(success_response(response_data))
+}
+
+/// Handler to display the points accumulated by each operator (ledger-based).
+#[instrument(name = "get_operator_points_v2", skip(pool))]
+pub async fn get_operator_points_v2(State(AppState { pool, .. }): State<AppState>) -> Result<Json<ApiResponse<Vec<OperatorPointsResponse>>>, (StatusCode, String)> {
+    let mut conn = pool.get().map_err(|e| ApiError::DatabaseConnection(e.to_string()))?;
+
+    // Aggregate directly from ledger
+    let results: Vec<(Vec<u8>, f64)> = operator_points_ledger::table
+        .group_by(operator_points_ledger::operator)
+        .select((operator_points_ledger::operator, sql::<Double>("SUM(points)")))
+        .load(&mut conn)
+        .map_err(|e| ApiError::DatabaseQuery(e.to_string()))?;
+
+    // Convert into response format
+    let mut response_data: Vec<OperatorPointsResponse> = results
+        .into_iter()
+        .map(|(addr_bytes, points)| OperatorPointsResponse {
+            address: format_address(&addr_bytes),
+            points,
+        })
+        .collect();
+
+    // Sort descending
     response_data.sort_by(|a, b| b.points.partial_cmp(&a.points).unwrap_or(std::cmp::Ordering::Equal));
 
     Ok(success_response(response_data))

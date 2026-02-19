@@ -261,6 +261,7 @@ async fn main() {
         .route("/peers_reachability_status/quic", get(handlers::get_peers_reachability_status_quic))
         .route("/tasks", get(handlers::get_tasks))
         .route("/operator_points", get(handlers::get_operator_points))
+        .route("/operator_points_v2", get(handlers::get_operator_points_v2))
         .route("/total_network_tvl", get(handlers::get_network_tvl));
 
     let app_state = AppState {
