@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use diesel::prelude::*;
 
-use crate::schema::{monitor_task_state, task_attestors, task_performers, tasks};
+use crate::schema::{monitor_task_state, operator_points_ledger, task_attestors, task_performers, tasks};
 
 #[derive(Queryable, Selectable, Debug)]
 #[diesel(table_name = crate::schema::requests)]
@@ -37,7 +37,6 @@ pub struct MultiplierServedRequests {
     pub multiplier_peer_id: String,
     pub request_id: String,
 }
-
 
 #[derive(Queryable, Selectable, Debug)]
 #[diesel(table_name = crate::schema::peer_reachability_tcp)]
@@ -119,6 +118,18 @@ pub struct TaskPerformers {
 pub struct TaskAttestors {
     pub task_id: i64,
     pub attestor: Vec<u8>,
+}
+
+#[derive(Queryable, Selectable, Debug)]
+#[diesel(table_name = crate::schema::operator_points_ledger)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct OperatorPointsLedger {
+    pub id: i64,
+    pub operator: Vec<u8>,
+    pub task_id: i64,
+    pub role: String,
+    pub points: f64,
+    pub created_at: DateTime<Utc>,
 }
 
 // --- Insertable Structs (for writing to DB) ---
@@ -234,3 +245,13 @@ pub struct NewMonitorTaskState {
     pub last_processed_block: i64,
 }
 
+#[derive(Debug, Insertable)]
+#[diesel(table_name = operator_points_ledger)]
+#[diesel(check_for_backend(diesel::pg::Pg))]
+pub struct NewOperatorPointsLedger {
+    pub operator: Vec<u8>,
+    pub task_id: i64,
+    pub role: String,
+    pub points: f64,
+    pub created_at: DateTime<Utc>,
+}

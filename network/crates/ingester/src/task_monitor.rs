@@ -1,12 +1,13 @@
 use crate::{
-    models::{NewMonitorTaskState, NewTask, NewTaskAttestor, NewTaskPerformer},
-    schema::{monitor_task_state, task_attestors, task_performers, tasks},
+    models::{NewMonitorTaskState, NewOperatorPointsLedger, NewTask, NewTaskAttestor, NewTaskPerformer},
+    schema::{monitor_task_state, operator_points_ledger, task_attestors, task_performers, tasks},
     PgPool,
 };
 use alloy::{
-    primitives::{Address, B256, Bytes, U256},
+    primitives::{Address, Bytes, B256, U256},
     providers::{
-        Identity, Provider, ProviderBuilder, RootProvider, WsConnect, fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller}
+        fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller},
+        Identity, Provider, ProviderBuilder, RootProvider, WsConnect,
     },
     rpc::types::BlockNumberOrTag,
     sol,
@@ -21,6 +22,20 @@ use std::{collections::HashMap, env, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument, warn};
+
+pub enum OperatorRole {
+    Performer,
+    Attestor,
+}
+
+impl OperatorRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Performer => "performer",
+            Self::Attestor => "attestor",
+        }
+    }
+}
 
 sol!(
     #[sol(rpc)]
@@ -141,6 +156,39 @@ impl TaskSubmittedEvent {
             if !new_attestors.is_empty() {
                 diesel::insert_into(task_attestors::table).values(&new_attestors).execute(conn)?;
             }
+
+            let performer_points: Vec<NewOperatorPointsLedger> = self
+                .performers
+                .iter()
+                .map(|addr| NewOperatorPointsLedger {
+                    operator: addr.as_slice().to_vec(),
+                    task_id,
+                    role: OperatorRole::Performer.as_str().into(),
+                    points: self.task_size as f64,
+                    created_at: new_task.timestamp,
+                })
+                .collect();
+
+            if !performer_points.is_empty() {
+                diesel::insert_into(operator_points_ledger::table).values(&performer_points).on_conflict_do_nothing().execute(conn)?;
+            }
+
+            let attestor_points: Vec<NewOperatorPointsLedger> = self
+                .attester_addresses
+                .iter()
+                .map(|addr| NewOperatorPointsLedger {
+                    operator: addr.as_slice().to_vec(),
+                    task_id,
+                    role: OperatorRole::Attestor.as_str().into(),
+                    points: 0.1 * self.task_size as f64,
+                    created_at: new_task.timestamp,
+                })
+                .collect();
+
+            if !attestor_points.is_empty() {
+                diesel::insert_into(operator_points_ledger::table).values(&attestor_points).on_conflict_do_nothing().execute(conn)?;
+            }
+
             // Persist the last processed block number
             diesel::insert_into(monitor_task_state::table)
                 .values(&NewMonitorTaskState {
