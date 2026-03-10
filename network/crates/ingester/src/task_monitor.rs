@@ -54,6 +54,8 @@ sol!(
         }
         // Define the function from the smart contract that returns operator details
         function getActiveOperatorsDetails() external view returns (OperatorDetails[] memory _operators);
+        // Lookup any operator (including inactive) by ID
+        function getOperatorPaymentDetail(uint256 _operatorId) external view returns (PaymentDetails memory);
     }
 
     // Define the struct that the smart contract function returns
@@ -61,6 +63,14 @@ sol!(
         address operator;
         uint256 operatorId;
         uint256 votingPower;
+        uint256 feeToClaim;
+    }
+
+    struct PaymentDetails {
+        address operator;
+        uint256 lastPaidTaskNumber;
+        uint256 feeToClaim;
+        uint8 paymentStatus;
     }
 );
 
@@ -340,8 +350,8 @@ impl ContractEventMonitor {
         let operators_call = contract.getActiveOperatorsDetails();
         let operators = operators_call.call().await.map_err(|e| format!("Failed to fetch operator details: {}", e))?;
 
-        // Populate the cache
-        cache.clear(); // Clear old cache before populating
+        // Merge new entries into cache (never remove old entries, as inactive
+        // operators still need to be resolved for historical attestations)
         for details in operators._operators {
             cache.insert(details.operatorId, details.operator);
         }
@@ -382,14 +392,32 @@ impl ContractEventMonitor {
             if let Some(address) = operator_map.get(attester_id) {
                 attester_addresses.push(*address);
             } else {
-                warn!("Could not find address for attester ID: {:?}", attester_id);
+                warn!("Could not find address for attester ID: {:?} in active operators, refreshing cache", attester_id);
                 // Force a cache refresh and try again
                 operator_map = self.get_operator_address_map(true).await?;
                 if let Some(address) = operator_map.get(attester_id) {
                     attester_addresses.push(*address);
                     info!("Successfully found attester ID {:?} after cache refresh.", attester_id);
                 } else {
-                    error!("Attester ID {:?} still not found after cache refresh.", attester_id);
+                    // Fallback: look up via getOperatorPaymentDetail (works for inactive operators)
+                    warn!("Attester ID {:?} not in active set, trying getOperatorPaymentDetail", attester_id);
+                    let contract = AttestationCenter::new(self.contract_address, self.provider.clone());
+                    match contract.getOperatorPaymentDetail(*attester_id).call().await {
+                        Ok(detail) if detail._0.operator != Address::ZERO => {
+                            let addr = detail._0.operator;
+                            info!("Resolved inactive attester ID {:?} to address {}", attester_id, addr);
+                            attester_addresses.push(addr);
+                            // Cache it so we don't need to look it up again
+                            let mut cache = self.operator_address_cache.lock().await;
+                            cache.insert(*attester_id, addr);
+                        }
+                        Ok(_) => {
+                            error!("Attester ID {:?} resolved to zero address, skipping", attester_id);
+                        }
+                        Err(e) => {
+                            error!("Failed to look up attester ID {:?} via getOperatorPaymentDetail: {:?}", attester_id, e);
+                        }
+                    }
                 }
             }
         }
