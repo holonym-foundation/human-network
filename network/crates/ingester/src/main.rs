@@ -278,7 +278,7 @@ async fn main() {
     };
     let app = Router::new()
         .nest("/api/v1", api_router)
-        .nest("/symbiotic", symbiotic_router)
+        .nest("/api/v1/symbiotic", symbiotic_router)
         .with_state(app_state)
         // Add CORS layer for production readiness
         .layer(
