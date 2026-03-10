@@ -13,7 +13,8 @@ use tracing::{error, info, instrument, warn};
 
 use crate::api_models::{
     ApiResponse, CmcResponse, CurrentQuorumResponse, EigenResponse, KeyCount, KeysGeneratedChartData, MultiplierComputedRequests, MultiplierQuorumElections, OperatorPointsResponse, PaginatedResponse,
-    PeerReachabilityStatus, QuorumElectionResponse, QuorumMemberResponse, RequestResponse, SymbioticResponse, TaskResponse, TotalKeysGenerated, TotalNetworkTvl, UserCreditsResponse,
+PeerReachabilityStatus, QuorumElectionResponse, QuorumMemberResponse, RequestResponse, SymbioticPointRecord, SymbioticPointsParams, SymbioticResponse, SymbioticStatsParams, SymbioticStatsResponse, SymbioticSyncedToResponse, TaskResponse,
+    TotalKeysGenerated, TotalNetworkTvl, UserCreditsResponse,
 };
 use crate::models::{MultiplierInfo, PeerReachabilityQuic, PeerReachabilityTcp, QuorumResharingInfoDb, Requests, Task, TaskAttestors, TaskPerformers, UserCredits};
 use crate::schema::{
@@ -823,6 +824,178 @@ async fn fetch_eth_price(client: &reqwest::Client, api_key: &str) -> Result<f64,
     Ok(response.data.ethereum.quote.usd.price)
 }
 
+// --- Symbiotic External Points API V2 ---
+
+const HUMAN_NETWORK_ADDRESS: &str = "0x42F15F9E4dF4994317453477e80e24797CC1A929";
+const MAX_SYMBIOTIC_PAGE_SIZE: i64 = 1000;
+
+/// Validates a timestamp string and returns the YYYY-MM-DD date portion.
+fn parse_date_filter(ts: &str) -> Result<&str, ApiError> {
+    let date_part = ts.split('T').next().unwrap_or(ts);
+    let valid = date_part.len() == 10
+        && date_part.chars().enumerate().all(|(i, c)| match i {
+            4 | 7 => c == '-',
+            _ => c.is_ascii_digit(),
+        });
+    if valid {
+        Ok(date_part)
+    } else {
+        Err(ApiError::Internal("Invalid timestamp format, expected YYYY-MM-DD".to_string()))
+    }
+}
+
+/// Validates the receiver_type query param.
+fn validate_receiver_type(receiver_type: &str) -> Result<(), ApiError> {
+    match receiver_type {
+        "operator" | "staker" => Ok(()),
+        _ => Err(ApiError::Internal("receiver_type must be 'operator' or 'staker'".to_string())),
+    }
+}
+
+/// Appends optional timestamp and receiver_type filters to a SQL query string.
+fn append_symbiotic_filters(
+    query: &mut String,
+    timestamp: Option<&str>,
+    receiver_type: Option<&str>,
+) -> Result<(), ApiError> {
+    if let Some(ts) = timestamp {
+        let date_part = parse_date_filter(ts)?;
+        query.push_str(&format!(" AND date <= '{}'", date_part));
+    }
+    if let Some(rt) = receiver_type {
+        validate_receiver_type(rt)?;
+        query.push_str(&format!(" AND address_type = '{}'", rt));
+    }
+    Ok(())
+}
+
+#[derive(QueryableByName)]
+struct MaxDateRow {
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    last_date: Option<String>,
+}
+
+#[derive(QueryableByName)]
+struct StatsRow {
+    #[diesel(sql_type = diesel::sql_types::Double)]
+    total_points: f64,
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    stakers: i64,
+    #[diesel(sql_type = diesel::sql_types::BigInt)]
+    operators: i64,
+}
+
+#[derive(QueryableByName)]
+struct PointRow {
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    date: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    address: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    address_type: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Text>)]
+    vault: Option<String>,
+    #[diesel(sql_type = diesel::sql_types::Nullable<diesel::sql_types::Double>)]
+    points: Option<f64>,
+}
+
+/// GET /symbiotic/health
+pub async fn symbiotic_health() -> StatusCode {
+    StatusCode::OK
+}
+
+/// GET /symbiotic/synced-to
+#[instrument(name = "symbiotic_synced_to", skip(pool))]
+pub async fn symbiotic_synced_to(
+    State(AppState { pool, .. }): State<AppState>,
+) -> Result<Json<SymbioticSyncedToResponse>, (StatusCode, String)> {
+    let mut conn = pool.get().map_err(|e| ApiError::DatabaseConnection(e.to_string()))?;
+
+    let result = diesel::sql_query("SELECT MAX(date) as last_date FROM symbiotic_points_daily")
+        .get_result::<MaxDateRow>(&mut conn)
+        .map_err(|e| ApiError::DatabaseQuery(e.to_string()))?;
+
+    let last_timestamp = result
+        .last_date
+        .map(|d| format!("{}T00:00:00Z", d))
+        .unwrap_or_else(|| "1970-01-01T00:00:00Z".to_string());
+
+    Ok(Json(SymbioticSyncedToResponse { last_timestamp }))
+}
+
+/// GET /symbiotic/stats
+#[instrument(name = "symbiotic_stats", skip(pool))]
+pub async fn symbiotic_stats(
+    State(AppState { pool, .. }): State<AppState>,
+    Query(params): Query<SymbioticStatsParams>,
+) -> Result<Json<SymbioticStatsResponse>, (StatusCode, String)> {
+    let mut conn = pool.get().map_err(|e| ApiError::DatabaseConnection(e.to_string()))?;
+
+    let mut query = String::from(
+        "SELECT \
+         COALESCE(SUM(points), 0) AS total_points, \
+         COUNT(DISTINCT CASE WHEN address_type = 'staker' THEN address END) AS stakers, \
+         COUNT(DISTINCT CASE WHEN address_type = 'operator' THEN address END) AS operators \
+         FROM symbiotic_points_daily \
+         WHERE address_type IN ('operator', 'staker')",
+    );
+    append_symbiotic_filters(&mut query, params.timestamp.as_deref(), params.receiver_type.as_deref())?;
+
+    let row = diesel::sql_query(&query)
+        .get_result::<StatsRow>(&mut conn)
+        .map_err(|e| ApiError::DatabaseQuery(e.to_string()))?;
+
+    Ok(Json(SymbioticStatsResponse {
+        total_points: (row.total_points * 1e18).floor() as i64,
+        stakers: row.stakers,
+        networks: 0,
+        operators: row.operators,
+    }))
+}
+
+/// GET /symbiotic/points
+#[instrument(name = "symbiotic_points", skip(pool))]
+pub async fn symbiotic_points(
+    State(AppState { pool, .. }): State<AppState>,
+    Query(params): Query<SymbioticPointsParams>,
+) -> Result<Json<Vec<SymbioticPointRecord>>, (StatusCode, String)> {
+    let mut conn = pool.get().map_err(|e| ApiError::DatabaseConnection(e.to_string()))?;
+
+    let limit = params.limit.clamp(1, MAX_SYMBIOTIC_PAGE_SIZE);
+    let offset = params.offset.max(0);
+
+    let mut query = String::from(
+        "SELECT date, address, address_type, vault, points \
+         FROM symbiotic_points_daily \
+         WHERE address_type IN ('operator', 'staker')",
+    );
+    append_symbiotic_filters(&mut query, params.timestamp.as_deref(), params.receiver_type.as_deref())?;
+    query.push_str(&format!(
+        " ORDER BY date DESC, address ASC, vault ASC OFFSET {} LIMIT {}",
+        offset, limit,
+    ));
+
+    let rows = diesel::sql_query(&query)
+        .load::<PointRow>(&mut conn)
+        .map_err(|e| ApiError::DatabaseQuery(e.to_string()))?;
+
+    let records = rows
+        .into_iter()
+        .filter_map(|row| {
+            Some(SymbioticPointRecord {
+                receiver_address: row.address?,
+                receiver_type: row.address_type?,
+                timestamp: format!("{}T00:00:00Z", row.date?),
+                network_address: HUMAN_NETWORK_ADDRESS.to_string(),
+                vault_address: row.vault?,
+                points: (row.points.unwrap_or(0.0) * 1e18).floor() as i64,
+            })
+        })
+        .collect();
+
+    Ok(Json(records))
+}
+
 #[cfg(test)]
 mod tests {
     use dotenv::dotenv;
@@ -851,5 +1024,172 @@ mod tests {
         let result = get_network_tvl(State(app_state)).await;
         println!("{:?}", result);
         assert!(result.is_ok());
+    }
+
+    // --- parse_date_filter ---
+
+    #[test]
+    fn test_parse_date_filter_valid_date() {
+        assert_eq!(parse_date_filter("2025-01-15").unwrap(), "2025-01-15");
+    }
+
+    #[test]
+    fn test_parse_date_filter_strips_time() {
+        assert_eq!(parse_date_filter("2025-01-15T00:00:00Z").unwrap(), "2025-01-15");
+    }
+
+    #[test]
+    fn test_parse_date_filter_invalid() {
+        assert!(parse_date_filter("bad").is_err());
+        assert!(parse_date_filter("2025/01/15").is_err());
+        assert!(parse_date_filter("").is_err());
+        assert!(parse_date_filter("20250115").is_err());
+        assert!(parse_date_filter("2025-1-15").is_err());
+    }
+
+    // --- validate_receiver_type ---
+
+    #[test]
+    fn test_validate_receiver_type_valid() {
+        assert!(validate_receiver_type("operator").is_ok());
+        assert!(validate_receiver_type("staker").is_ok());
+    }
+
+    #[test]
+    fn test_validate_receiver_type_invalid() {
+        assert!(validate_receiver_type("network").is_err());
+        assert!(validate_receiver_type("").is_err());
+        assert!(validate_receiver_type("OPERATOR").is_err());
+    }
+
+    // --- append_symbiotic_filters ---
+
+    #[test]
+    fn test_append_filters_none() {
+        let mut q = String::from("SELECT 1 WHERE true");
+        append_symbiotic_filters(&mut q, None, None).unwrap();
+        assert_eq!(q, "SELECT 1 WHERE true");
+    }
+
+    #[test]
+    fn test_append_filters_timestamp_only() {
+        let mut q = String::from("SELECT 1 WHERE true");
+        append_symbiotic_filters(&mut q, Some("2025-03-01"), None).unwrap();
+        assert!(q.contains("AND date <= '2025-03-01'"));
+    }
+
+    #[test]
+    fn test_append_filters_receiver_type_only() {
+        let mut q = String::from("SELECT 1 WHERE true");
+        append_symbiotic_filters(&mut q, None, Some("staker")).unwrap();
+        assert!(q.contains("AND address_type = 'staker'"));
+    }
+
+    #[test]
+    fn test_append_filters_both() {
+        let mut q = String::from("SELECT 1 WHERE true");
+        append_symbiotic_filters(&mut q, Some("2025-06-01T12:00:00Z"), Some("operator")).unwrap();
+        assert!(q.contains("AND date <= '2025-06-01'"));
+        assert!(q.contains("AND address_type = 'operator'"));
+    }
+
+    #[test]
+    fn test_append_filters_invalid_timestamp_propagates() {
+        let mut q = String::from("SELECT 1 WHERE true");
+        assert!(append_symbiotic_filters(&mut q, Some("bad-date"), None).is_err());
+    }
+
+    #[test]
+    fn test_append_filters_invalid_receiver_type_propagates() {
+        let mut q = String::from("SELECT 1 WHERE true");
+        assert!(append_symbiotic_filters(&mut q, None, Some("unknown")).is_err());
+    }
+
+    // --- Integration tests (require DB via dotenv) ---
+
+    #[tokio::test]
+    async fn test_symbiotic_synced_to() {
+        dotenv().ok();
+        let app_state = AppState::default();
+        let result = symbiotic_synced_to(State(app_state)).await;
+        assert!(result.is_ok());
+        let json = result.unwrap().0;
+        assert!(json.last_timestamp.ends_with("T00:00:00Z"));
+    }
+
+    #[tokio::test]
+    async fn test_symbiotic_stats_no_filters() {
+        dotenv().ok();
+        let app_state = AppState::default();
+        let params = SymbioticStatsParams { timestamp: None, receiver_type: None };
+        let result = symbiotic_stats(State(app_state), Query(params)).await;
+        assert!(result.is_ok());
+        let json = result.unwrap().0;
+        assert!(json.total_points >= 0);
+        assert!(json.stakers >= 0);
+        assert!(json.operators >= 0);
+        assert_eq!(json.networks, 0);
+    }
+
+    #[tokio::test]
+    async fn test_symbiotic_stats_with_receiver_type() {
+        dotenv().ok();
+        let app_state = AppState::default();
+        let params = SymbioticStatsParams {
+            timestamp: None,
+            receiver_type: Some("staker".to_string()),
+        };
+        let result = symbiotic_stats(State(app_state), Query(params)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_symbiotic_stats_invalid_receiver_type() {
+        dotenv().ok();
+        let app_state = AppState::default();
+        let params = SymbioticStatsParams {
+            timestamp: None,
+            receiver_type: Some("invalid".to_string()),
+        };
+        let result = symbiotic_stats(State(app_state), Query(params)).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_symbiotic_points_basic() {
+        dotenv().ok();
+        let app_state = AppState::default();
+        let params = SymbioticPointsParams {
+            timestamp: None,
+            offset: 0,
+            limit: 10,
+            receiver_type: None,
+        };
+        let result = symbiotic_points(State(app_state), Query(params)).await;
+        assert!(result.is_ok());
+        let records = result.unwrap().0;
+        assert!(records.len() <= 10);
+        for r in &records {
+            assert_eq!(r.network_address, HUMAN_NETWORK_ADDRESS);
+            assert!(!r.receiver_address.is_empty());
+            assert!(r.receiver_type == "operator" || r.receiver_type == "staker");
+            assert!(r.timestamp.ends_with("T00:00:00Z"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_symbiotic_points_limit_clamped() {
+        dotenv().ok();
+        let app_state = AppState::default();
+        let params = SymbioticPointsParams {
+            timestamp: None,
+            offset: 0,
+            limit: 99999,
+            receiver_type: None,
+        };
+        let result = symbiotic_points(State(app_state), Query(params)).await;
+        assert!(result.is_ok());
+        let records = result.unwrap().0;
+        assert!(records.len() as i64 <= MAX_SYMBIOTIC_PAGE_SIZE);
     }
 }

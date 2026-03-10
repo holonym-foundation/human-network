@@ -266,12 +266,19 @@ async fn main() {
         .route("/operator_points_v3", get(handlers::get_operator_points_v3))
         .route("/total_network_tvl", get(handlers::get_network_tvl));
 
+    let symbiotic_router = Router::new()
+        .route("/health", get(handlers::symbiotic_health))
+        .route("/synced-to", get(handlers::symbiotic_synced_to))
+        .route("/stats", get(handlers::symbiotic_stats))
+        .route("/points", get(handlers::symbiotic_points));
+
     let app_state = AppState {
         pool: pool.clone(),
         tvl_cache: LruCache::<(), f64>::with_expiry_duration(Duration::from_secs(60 * 60 * 24)), // Cache TVL for 24 hours
     };
     let app = Router::new()
         .nest("/api/v1", api_router)
+        .nest("/symbiotic", symbiotic_router)
         .with_state(app_state)
         // Add CORS layer for production readiness
         .layer(
