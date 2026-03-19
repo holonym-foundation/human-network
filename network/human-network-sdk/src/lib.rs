@@ -14,6 +14,7 @@ use human_crypto::{
     encryption::{decrypt_elgamal_from_shared_secret, encrypt_with_conditions, DecryptionContractSignature, ElGamalCiphertext, ElGamalCiphertextWithSignedConditions, MapCurve},
     oprf_client_1,
     schnorrsig::{SchnorrSig, SchnorrSignable},
+    twisted_conversion::TwistedEdwardsConversion,
     zkinjmask::{invert_mask_and_obtain_prf, FrontendData, JWTClaims, Mask, MaskProof},
     BabyJubJub, Curve, DLEQProof, PointTrait, ScalarTrait, Secp256k1,
 };
@@ -225,7 +226,20 @@ pub fn msg_to_point(msg: &[u8]) -> String {
     let mut padded_msg = [0u8; 24];
     padded_msg[24 - msg.len()..].copy_from_slice(msg);
     let point = BabyJubJub::koblitz_map(&padded_msg).unwrap();
-    point.to_string()
+    // Convert to twisted Edwards form for circom compatibility.
+    // Circom uses twisted Edwards (a=168700), arkworks uses standard Edwards (a=1).
+    let twisted = point.edwards_to_twisted();
+    twisted.to_string()
+}
+
+/// Returns the network public key as (x, y) decimal strings in twisted Edwards form,
+/// suitable for passing to circom circuits.
+#[wasm_bindgen]
+pub fn network_pubkey_for_circom() -> String {
+    let twisted = NETWORK_BABYJUB_PUBKEY.edwards_to_twisted();
+    let x: BigUint = twisted.x.into_bigint().into();
+    let y: BigUint = twisted.y.into_bigint().into();
+    serde_json::to_string(&serde_json::json!([x.to_string(), y.to_string()])).unwrap()
 }
 pub async fn request_user_state(method: Method, address: Address) -> StateResponse {
     let body = serde_json::to_string(&StateRequest { method, user: address }).unwrap();
@@ -266,14 +280,18 @@ pub async fn sign_request_to_network(request: String, private_key: String) -> St
 fn parse_decrypt_args(human_user_privkey: String, ciphertext: String, conditions_contract: String, sig: String) -> (LocalWallet, ElGamalCiphertextWithSignedConditions) {
     let wallet = LocalWallet::from_str(&human_user_privkey).expect("Failed to parse private key");
     let ciphertext = serde_json::from_str::<CiphertextInput>(&ciphertext).expect("invalid ciphertext");
+    // Ciphertext points from circom are in twisted Edwards form (a=168700, d=168696).
+    // Arkworks uses standard Edwards form (a=1). Apply twisted_to_edwards() to convert.
     let ephemeral_dh_pubkey = Affine::<EdwardsConfig> {
         x: BigUint::from_str(ciphertext.c1.x.as_str()).expect("invalid x coordinate").into(),
         y: BigUint::from_str(ciphertext.c1.y.as_str()).expect("invalid y coordinate").into(),
-    };
+    }.twisted_to_edwards();
+    assert!(ephemeral_dh_pubkey.is_on_curve(), "ephemeral_dh_pubkey is not on the curve after twist conversion");
     let encrypted_msg = Affine::<EdwardsConfig> {
         x: BigUint::from_str(ciphertext.c2.x.as_str()).expect("invalid x coordinate").into(),
-        y: BigUint::from_str(ciphertext.c2.y.as_str()).expect("invalid x coordinate").into(),
-    };
+        y: BigUint::from_str(ciphertext.c2.y.as_str()).expect("invalid y coordinate").into(),
+    }.twisted_to_edwards();
+    assert!(encrypted_msg.is_on_curve(), "encrypted_msg is not on the curve after twist conversion");
     let ciphertext = ElGamalCiphertext::<32, BabyJubJub> { encrypted_msg, ephemeral_dh_pubkey };
     let parsed_contract = conditions_contract.parse::<Address>().expect("invalid conditions contract address");
     let parsed_sig = serde_json::from_str::<SchnorrSig<32, BabyJubJub>>(&sig).expect("invalid signature");

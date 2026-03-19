@@ -1,6 +1,6 @@
 {
   "name": "@human.tech/human-network-sdk",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Human Network SDK for browser and Node.js",
   "exports": {
     "types": "./pkg/esm/human_network_sdk.d.ts",
