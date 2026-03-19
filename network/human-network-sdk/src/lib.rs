@@ -232,11 +232,15 @@ pub fn msg_to_point(msg: &[u8]) -> String {
     twisted.to_string()
 }
 
-/// Returns the network public key as (x, y) decimal strings in twisted Edwards form,
+/// Converts an encoded BabyJubJub public key to (x, y) decimal strings in twisted Edwards form,
 /// suitable for passing to circom circuits.
+/// `encoded_pubkey_hex` is the hex-encoded serialized point (e.g. from finalized_group_public_keys).
 #[wasm_bindgen]
-pub fn network_pubkey_for_circom() -> String {
-    let twisted = NETWORK_BABYJUB_PUBKEY.edwards_to_twisted();
+pub fn pubkey_to_circom_format(encoded_pubkey_hex: String) -> String {
+    let pubkey = <BabyJubJub as Curve<32>>::Point::from_encoded(
+        &hex::decode(&encoded_pubkey_hex).expect("invalid hex")
+    ).expect("invalid pubkey encoding");
+    let twisted = pubkey.edwards_to_twisted();
     let x: BigUint = twisted.x.into_bigint().into();
     let y: BigUint = twisted.y.into_bigint().into();
     serde_json::to_string(&serde_json::json!([x.to_string(), y.to_string()])).unwrap()
