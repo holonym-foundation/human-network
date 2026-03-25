@@ -226,10 +226,9 @@ pub fn msg_to_point(msg: &[u8]) -> String {
     let mut padded_msg = [0u8; 24];
     padded_msg[24 - msg.len()..].copy_from_slice(msg);
     let point = BabyJubJub::koblitz_map(&padded_msg).unwrap();
-    // Convert to twisted Edwards form for circom compatibility.
-    // Circom uses twisted Edwards (a=168700), arkworks uses standard Edwards (a=1).
-    let twisted = point.edwards_to_twisted();
-    twisted.to_string()
+    // Return in standard Edwards form (a=1). The V3CleanHands circuit applies
+    // UntwistedToTwisted() itself before passing to EncryptElGamal/BabyCheck.
+    point.to_string()
 }
 
 /// Converts an encoded BabyJubJub public key to (x, y) decimal strings in twisted Edwards form,
