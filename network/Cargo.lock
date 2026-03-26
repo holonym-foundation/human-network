@@ -4362,6 +4362,7 @@ dependencies = [
  "ethers",
  "hex",
  "human-crypto",
+ "js-sys",
  "lazy_static",
  "libp2p",
  "num-bigint 0.4.6",

@@ -23,8 +23,9 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 // use wasm_bindgen_test::console_log;
-use std::{collections::HashMap, fmt::Display, str::FromStr, thread::sleep, time::Duration};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::JsFuture;
 extern crate console_error_panic_hook;
 use std::panic;
 mod utils;
@@ -43,8 +44,24 @@ macro_rules! log {
 #[wasm_bindgen]
 pub fn enable_errors() { panic::set_hook(Box::new(console_error_panic_hook::hook)); }
 // const RELAY_URL: &'static str = "http://159.65.246.91:3031"; // http://localhost:3031
+// const RELAY_URL: &'static str = "http://0.0.0.0:8081";
 // Mainnet
 const RELAY_URL: &'static str = "http://44.217.242.218:8081";
+const POLL_INTERVAL_MS: i32 = 2000;
+const MAX_POLL_ATTEMPTS: u32 = 30;
+
+async fn async_sleep(ms: i32) {
+    let promise = js_sys::Promise::new(&mut |resolve, _| {
+        let global = js_sys::global();
+        let set_timeout = js_sys::Reflect::get(&global, &JsValue::from_str("setTimeout"))
+            .expect("setTimeout not found")
+            .dyn_into::<js_sys::Function>()
+            .expect("setTimeout is not a function");
+        set_timeout.call2(&JsValue::NULL, &resolve, &JsValue::from(ms)).unwrap();
+    });
+    JsFuture::from(promise).await.unwrap();
+}
+
 fn to_js_err<E: Display>(e: E) -> JsError { JsError::new(&e.to_string()) }
 // const TO_JS_ERR: Fn(dyn Error) -> JsError = |e| JsError::new(&e.to_string());
 // fn map_jserr<T, E: Display>(e: Result<T, E>) -> Result<T, JsError> {
@@ -428,7 +445,59 @@ pub async fn decrypt(human_user_privkey: String, ciphertext: String, conditions_
         log!("[decrypt] decryption successful!");
         BigUint::from_bytes_be(output.as_ref()).to_string()
     } else if let NodeResponse::Submitted { request_id } = rpc_response.result {
-        panic!("Request submitted but not yet completed. request_id: {}", request_id);
+        log!("[decrypt] request submitted, polling for result. request_id: {}", request_id);
+        let mut attempts = 0;
+        loop {
+            attempts += 1;
+            if attempts > MAX_POLL_ATTEMPTS {
+                panic!("Polling timed out after {} attempts for request_id: {}", MAX_POLL_ATTEMPTS, request_id);
+            }
+            async_sleep(POLL_INTERVAL_MS).await;
+            log!("[decrypt] polling attempt {}/{}...", attempts, MAX_POLL_ATTEMPTS);
+            let poll_payload = json!({
+                "jsonrpc": "2.0",
+                "method": "mishti_fetch_threshold_mul_result",
+                "params": [request_id],
+                "id": 1
+            });
+            let poll_res = HTTP_CLIENT
+                .post(RELAY_URL)
+                .json(&poll_payload)
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            log!("[decrypt] poll response: {}", poll_res);
+            let poll_response: JsonRpcNodeResponse = serde_json::from_str(&poll_res)
+                .unwrap_or_else(|e| panic!("Failed to parse poll response: {}. Raw: {}", e, poll_res));
+            match poll_response.result {
+                NodeResponse::VerifiedProofBabyJubJub { reconstructed_point, .. } => {
+                    log!("[decrypt] got reconstructed point from polling, decoding shared secret...");
+                    let shared_sec_bytes = bincode::serialize(&reconstructed_point).unwrap();
+                    let shared_sec = <BabyJubJub as Curve<32>>::Point::from_encoded(&shared_sec_bytes).unwrap();
+                    log!("[decrypt] shared secret decoded. decrypting ciphertext...");
+                    let output = decrypt_elgamal_from_shared_secret(&ciphertext_with_signed_conditions.ciphertext, &shared_sec).unwrap();
+                    log!("[decrypt] decryption successful!");
+                    return BigUint::from_bytes_be(output.as_ref()).to_string();
+                }
+                NodeResponse::Submitted { .. } => {
+                    log!("[decrypt] result not ready yet, will retry...");
+                    continue;
+                }
+                NodeResponse::Error { message } if message == "Not yet verified" => {
+                    log!("[decrypt] not yet verified, will retry...");
+                    continue;
+                }
+                NodeResponse::Error { message } => {
+                    panic!("Node error while polling: {}", message);
+                }
+                other => {
+                    panic!("Unexpected poll response: {:?}", other);
+                }
+            }
+        }
     } else if let NodeResponse::Error { message } = rpc_response.result {
         panic!("Node error: {}", message);
     } else {
