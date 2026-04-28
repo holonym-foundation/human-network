@@ -76,7 +76,7 @@ RUN apt update && apt install pkg-config libssl-dev build-essential cmake -y
 WORKDIR /project
 
 # Installing bunyan before copying projects to avoid recompiling
-RUN cargo install bunyan
+RUN cargo install bunyan --version "=0.1.8"
 
 COPY ./vole-zk-prover ./vole-zk-prover
 COPY ./network ./network
