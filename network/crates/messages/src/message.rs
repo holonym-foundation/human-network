@@ -121,6 +121,7 @@ pub enum AppStateChangeMessage {
     FetchVotingPower(PeerId, Sender<NodeResponse>),
     ForwardErrorResponse(String,NodeResponse),
     SetResharingEnabled(bool, Sender<NodeResponse>),
+    FetchFinalizedGroupPubkeys(Sender<NodeResponse>),
 }
 pub type Round1Output = (HashMap<u128, Vec<u8>>, Vec<Vec<u8>>, Vec<u8>);
 pub type Round2Output = Vec<u8>;

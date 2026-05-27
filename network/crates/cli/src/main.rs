@@ -4,13 +4,14 @@
 use clap::Parser;
 use ethers::signers::{LocalWallet, Signer};
 use jsonrpsee::http_client::{HttpClient, HttpClientBuilder};
-use messages::network_utils::{Method, RequestToNetwork, CONDITIONS_CONTRACT, NETWORK_BABYJUB_PUBKEY};
+use messages::network_utils::{Method, RequestToNetwork, CONDITIONS_CONTRACT};
 use messages::types::{NodeResponse, StateRequest, StateResponse};
 use human_crypto::encryption::{decrypt_elgamal_from_shared_secret, encrypt_with_conditions, ElGamalCiphertextWithSignedConditions};
 
 use human_crypto::{oprf_client_1, BabyJubJub, Curve, Secp256k1};
 use human_crypto::{PointTrait, ScalarTrait};
 use rpc_trait::rpc::HumanRpcClient;
+use lazy_static::lazy_static;
 use std::collections::HashMap;
 use std::{str::FromStr, time::Duration};
 use tokio::time::sleep;
@@ -165,6 +166,32 @@ async fn compute_oprf<const N: usize, C: Curve<N>>(input: &str) -> (Vec<u8>, C::
     oprf_client_1::<N, C, &[u8]>(salt, input.as_bytes()).expect("Failed to compute OPRF step 1")
 }
 fn build_http_client(rpc_url: &str) -> HttpClient { HttpClientBuilder::default().build(rpc_url).expect("Failed to build client") }
+
+lazy_static! {
+    /// Caches the network's finalized BabyJubJub group public key after the first
+    /// `get_pubkey` fetch so we don't re-query the relay on every decrypt request.
+    /// It's a `OnceCell` rather than a plain value because the key is fetched asynchronously.
+    static ref NETWORK_BABYJUB_PUBKEY: tokio::sync::OnceCell<<BabyJubJub as Curve<32>>::Point> = tokio::sync::OnceCell::new();
+}
+
+/// Fetches the network's finalized BabyJubJub group public key from the relay via the
+/// `get_pubkey` RPC method and caches it in [`NETWORK_BABYJUB_PUBKEY`].
+async fn get_network_babyjub_pubkey(client: &HttpClient) -> <BabyJubJub as Curve<32>>::Point {
+    *NETWORK_BABYJUB_PUBKEY
+        .get_or_init(|| async {
+            let response = client.get_pubkey().await.expect("Failed to fetch network pubkey via get_pubkey");
+            match response {
+                NodeResponse::Keyshare(pubkeys) => {
+                    let encoded = pubkeys.get("DecryptBabyJubjub").expect("DecryptBabyJubjub pubkey not found in get_pubkey response");
+                    let bytes = hex::decode(encoded).expect("Failed to hex-decode network BabyJubJub pubkey");
+                    <BabyJubJub as Curve<32>>::Point::from_encoded(&bytes).expect("Failed to decode network BabyJubJub pubkey point")
+                }
+                NodeResponse::Error { message, .. } => panic!("Network error fetching pubkey: {}", message),
+                other => panic!("Unexpected response from get_pubkey: {:?}", other),
+            }
+        })
+        .await
+}
 async fn fetch_state(client: &HttpClient, state_req: StateRequest) -> StateResponse { client.fetch_state(state_req).await.expect("Failed to fetch state") }
 async fn create_request(wallet: LocalWallet, point: Vec<u8>, method: Method, epoch: u32, requests_from_user: u128, extra_data: Option<Vec<u8>>) -> RequestToNetwork {
     RequestToNetwork {
@@ -228,7 +255,8 @@ async fn handle_method(args: Args, method: Method) {
         }
         Method::DecryptBabyJubJub => {
             let msg = &[123u8; 24];
-            let ciphertext_with_signed_conditions = encrypt_with_conditions(msg, &*NETWORK_BABYJUB_PUBKEY, *CONDITIONS_CONTRACT).unwrap();
+            let network_pubkey = get_network_babyjub_pubkey(&build_http_client(&args.rpc_url)).await;
+            let ciphertext_with_signed_conditions = encrypt_with_conditions(msg, &network_pubkey, *CONDITIONS_CONTRACT).unwrap();
             (
                 ciphertext_with_signed_conditions.ciphertext.ephemeral_dh_pubkey.encode(),
                 Some(bincode::serialize(&ciphertext_with_signed_conditions).unwrap()),

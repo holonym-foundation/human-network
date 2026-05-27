@@ -34,17 +34,7 @@ use human_crypto::{
 // const HUMAN_TOKEN_TESTNET: &str = "0x757Ab92207D730DF72A4B8Fb2c540F206ac647A9";
 pub const HUMAN_CREDITS: &str = "0x18494fecf61d2282c45b8bf481403c1fcb5d94e6";
 lazy_static! {
-    pub static ref WHITELISTED_DECRYPTOR: Address = "0xCd87C6A3317407F55249d294864b2502501Afdec".parse().unwrap();
-}
-lazy_static! {
     pub static ref CONDITIONS_CONTRACT: H160 = "0x248002ce5220b12d87bdbe148e04ee4bf29682f4".parse().unwrap();
-}
-// TODO: Change to the appropriate public key when required.
-lazy_static! {
-    pub static ref NETWORK_BABYJUB_PUBKEY: <BabyJubJub as Curve<32>>::Point = <BabyJubJub as Curve<32>>::Point::from_encoded(
-        &hex::decode("012000000000000000153e6e97edfbd87c5c559b6ef4941e4f89bea681575b1252afccdfce6bbe682f").unwrap()
-        // &hex::decode("012000000000000000469835755a0b099d9bb4d2d3da120c91bee97617ae71a18312a5c75550fad60a").unwrap()
-    ).unwrap();
 }
 // Generate the ABI of the Human Credits RobustNet contract (ETH Mainnet)
 abigen!(

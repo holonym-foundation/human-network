@@ -155,10 +155,6 @@ impl RequestToNetwork {
 // generate oprf specific structs and consts
 
 lazy_static! {
-    pub static ref NETWORK_BABYJUB_PUBKEY: <BabyJubJub as Curve<32>>::Point = <BabyJubJub as Curve<32>>::Point::from_encoded(
-        &hex::decode("012000000000000000153e6e97edfbd87c5c559b6ef4941e4f89bea681575b1252afccdfce6bbe682f").unwrap()
-        // &hex::decode("012000000000000000469835755a0b099d9bb4d2d3da120c91bee97617ae71a18312a5c75550fad60a").unwrap()
-    ).unwrap();
     pub static ref CONDITIONS_CONTRACT: H160 = "0x248002ce5220b12d87bdbe148e04ee4bf29682f4".parse().unwrap();
     pub static ref HTTP_CLIENT: Client = reqwest::ClientBuilder::new()
         .build()
@@ -269,6 +265,93 @@ pub fn msg_to_point(msg: &[u8]) -> String {
     // Return in standard Edwards form (a=1). The V3CleanHands circuit applies
     // UntwistedToTwisted() itself before passing to EncryptElGamal/BabyCheck.
     point.to_string()
+}
+
+/// Fetches the current BabyJubJub decryption public key from the relay node.
+/// The key changes after every DKG or resharing round, so call this before encrypting
+/// rather than relying on any hardcoded value.
+/// Returns the hex-encoded encoded point — pass it directly to `encrypt()`.
+#[wasm_bindgen]
+pub async fn get_network_babyjub_pubkey(relay_url: String) -> String {
+    let payload = json!({
+        "jsonrpc": "2.0",
+        "method": "mishti_get_pubkey",
+        "params": [],
+        "id": 1
+    });
+    let response_text = HTTP_CLIENT
+        .post(&relay_url)
+        .json(&payload)
+        .send()
+        .await
+        .expect("Failed to send get_pubkey request")
+        .text()
+        .await
+        .expect("Failed to read get_pubkey response");
+    log!("[get_network_babyjub_pubkey] raw response: {}", response_text);
+    let rpc_response: JsonRpcNodeResponse = serde_json::from_str(&response_text)
+        .unwrap_or_else(|e| panic!("Failed to parse get_pubkey response: {}. Raw: {}", e, response_text));
+    match rpc_response.result {
+        NodeResponse::Keyshare(map) => map
+            .get("DecryptBabyJubjub")
+            .expect("DecryptBabyJubjub key not found in network pubkeys")
+            .clone(),
+        NodeResponse::Error { message } => panic!("Network error fetching pubkey: {}", message),
+        _ => panic!("Unexpected response from mishti_get_pubkey"),
+    }
+}
+
+lazy_static! {
+    /// Caches the network's finalized BabyJubJub group public key after the first
+    /// `get_pubkey` fetch so we don't re-query the relay on every decrypt request.
+    static ref NETWORK_BABYJUB_PUBKEY: std::sync::OnceLock<<BabyJubJub as Curve<32>>::Point> = std::sync::OnceLock::new();
+}
+
+async fn network_babyjub_pubkey(relay_url: &str) -> <BabyJubJub as Curve<32>>::Point {
+    if let Some(pubkey) = NETWORK_BABYJUB_PUBKEY.get() {
+        return *pubkey;
+    }
+    let pubkey_hex = get_network_babyjub_pubkey(relay_url.to_string()).await;
+    let pubkey_bytes = hex::decode(&pubkey_hex).expect("Failed to hex-decode network BabyJubJub pubkey");
+    let pubkey = <BabyJubJub as Curve<32>>::Point::from_encoded(&pubkey_bytes).expect("Failed to decode network BabyJubJub pubkey point");
+    let _ = NETWORK_BABYJUB_PUBKEY.set(pubkey);
+    pubkey
+}
+
+/// Encrypts a message to a BabyJubJub public key using ElGamal encryption, binding
+/// the access-control contract into a Schnorr signature over the ephemeral key.
+/// Returns a JSON object whose fields are ready to pass directly to `decrypt()`:
+///   - `ciphertext`: `{ c1: { x, y }, c2: { x, y } }` — decimal coordinate strings (standard Edwards form)
+///   - `contract`: the conditions contract address
+///   - `sig`: Schnorr signature JSON string (`{ R, s }`)
+/// * `pubkey_hex` - Hex-encoded encoded BabyJubJub point (from `get_network_babyjub_pubkey`)
+/// * `msg_hex` - Hex-encoded plaintext, at most 24 bytes (left-padded with zeros if shorter)
+/// * `conditions_contract` - Address of the access-control contract
+#[wasm_bindgen]
+pub fn encrypt(pubkey_hex: String, msg_hex: String, conditions_contract: String) -> String {
+    let pubkey_bytes = hex::decode(&pubkey_hex).expect("invalid pubkey hex");
+    let pubkey = <BabyJubJub as Curve<32>>::Point::from_encoded(&pubkey_bytes).expect("invalid pubkey encoding");
+    let msg_bytes = hex::decode(&msg_hex).expect("invalid msg hex");
+    assert!(msg_bytes.len() <= 24, "message must be at most 24 bytes");
+    let mut padded = [0u8; 24];
+    padded[24 - msg_bytes.len()..].copy_from_slice(&msg_bytes);
+    let parsed_contract = conditions_contract.parse::<Address>().expect("invalid conditions contract address");
+    let enc = encrypt_with_conditions(&padded, &pubkey, parsed_contract).unwrap();
+    let c1_x: BigUint = enc.ciphertext.ephemeral_dh_pubkey.x.into_bigint().into();
+    let c1_y: BigUint = enc.ciphertext.ephemeral_dh_pubkey.y.into_bigint().into();
+    let c2_x: BigUint = enc.ciphertext.encrypted_msg.x.into_bigint().into();
+    let c2_y: BigUint = enc.ciphertext.encrypted_msg.y.into_bigint().into();
+    // c1_hash = keccak256(c1.encode()) — the exact value the conditions contract's canDecrypt receives
+    let c1_hash = ethers::utils::keccak256(enc.ciphertext.ephemeral_dh_pubkey.encode());
+    serde_json::to_string(&serde_json::json!({
+        "ciphertext": {
+            "c1": { "x": c1_x.to_string(), "y": c1_y.to_string() },
+            "c2": { "x": c2_x.to_string(), "y": c2_y.to_string() }
+        },
+        "contract": format!("0x{}", hex::encode(enc.signed_conditions.contract.as_bytes())),
+        "sig": serde_json::to_string(&enc.signed_conditions.sig).unwrap(),
+        "c1_hash": format!("0x{}", hex::encode(c1_hash))
+    })).unwrap()
 }
 
 /// Converts an encoded BabyJubJub public key to (x, y) decimal strings in twisted Edwards form,
@@ -668,7 +751,8 @@ pub async fn handle_oprf_request(private_key: Option<String>, input: Option<Stri
         }
         Method::DecryptBabyJubJub => {
             let msg = &[123u8; 24];
-            let ciphertext_with_signed_conditions = encrypt_with_conditions(msg, &*NETWORK_BABYJUB_PUBKEY, *CONDITIONS_CONTRACT).unwrap();
+            let network_pubkey = network_babyjub_pubkey(&rpc_url).await;
+            let ciphertext_with_signed_conditions = encrypt_with_conditions(msg, &network_pubkey, *CONDITIONS_CONTRACT).unwrap();
             (
                 ciphertext_with_signed_conditions.ciphertext.ephemeral_dh_pubkey.encode(),
                 Some(bincode::serialize(&ciphertext_with_signed_conditions).unwrap()),
@@ -759,7 +843,7 @@ async fn compute_oprf<const N: usize, C: Curve<N>>(input: &str) -> (Vec<u8>, C::
 async fn fetch_state(client: &Client, rpc_url: &str, state_req: StateRequest) -> Result<MessageStateResponse, Box<dyn std::error::Error>> {
     let payload = json!({
         "jsonrpc": "2.0",
-        "method": "human_fetch_state",
+        "method": "mishti_fetch_state",
         "params": [state_req],
         "id": 1
     });
@@ -775,7 +859,7 @@ async fn fetch_state(client: &Client, rpc_url: &str, state_req: StateRequest) ->
 async fn send_request(client: &Client, rpc_url: &str, req: RequestToNetwork) -> Result<NodeResponse, Box<dyn std::error::Error>> {
     let payload = json!({
         "jsonrpc": "2.0",
-        "method": "human_threshold_mul",
+        "method": "mishti_threshold_mul",
         "params": [req],
         "id": 1
     });
@@ -790,7 +874,7 @@ async fn send_request(client: &Client, rpc_url: &str, req: RequestToNetwork) -> 
 async fn query_threshold_multiplication(client: &Client, rpc_url: &str, request_id: &str) -> Result<NodeResponse, Box<dyn std::error::Error>> {
     let payload = json!({
         "jsonrpc": "2.0",
-        "method": "human_threshold_mul",
+        "method": "mishti_threshold_mul",
         "params": [request_id],
         "id": 1
     });
