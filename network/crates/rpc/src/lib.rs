@@ -28,7 +28,7 @@ use tracing::{error, info};
 //    pub used: bool,
 //}
 
-const HUMAN_NETWORK_VERSION: &str = "mainnetalphaV3.2.0";
+const HUMAN_NETWORK_VERSION: &str = "mainnetalphaV3.3.0";
 
 /// Implementation of the RPC server for handling various RPC requests.
 #[derive(Debug)]
