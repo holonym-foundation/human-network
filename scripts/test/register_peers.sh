@@ -96,170 +96,170 @@ $WORKDIR/../../network/target/release/registry_iface register \
     --rpcaddr http://127.0.0.1:8087 \
     --test true;
 
-echo 'Registering Prover 7...';
-RSA_SEED=e65d8194a7b73236097130356cfe3f4d51e95578eed4300ff9be4cf0cccc36f8 \
-SECP256K1_SEED=a0244a218da622f6e94158d908062883626401d0f275765fe9b6f2bb889b173a \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8088/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97 \
-    --multiaddr /ip4/127.0.0.1/udp/8088/quic-v1 \
-    --rpcaddr http://127.0.0.1:8088 \
-    --test true;
+# echo 'Registering Prover 7...';
+# RSA_SEED=e65d8194a7b73236097130356cfe3f4d51e95578eed4300ff9be4cf0cccc36f8 \
+# SECP256K1_SEED=a0244a218da622f6e94158d908062883626401d0f275765fe9b6f2bb889b173a \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8088/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0xdbda1821b80551c9d65939329250298aa3472ba22feea921c0cf5d620ea67b97 \
+#     --multiaddr /ip4/127.0.0.1/udp/8088/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8088 \
+#     --test true;
 
-    echo 'Registering Prover 8...';
-RSA_SEED=492b3ff6b32fc3fe3fd19dfbfe50356a12ec804b1914362e6d313dae3e8bc081 \
-SECP256K1_SEED=7249c5b72ef8ad7e7d5d943698a9f73c30f1a4625d7380ffaa0339efb0956eb6 \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8089/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6 \
-    --multiaddr /ip4/127.0.0.1/udp/8089/quic-v1 \
-    --rpcaddr http://127.0.0.1:8089 \
-    --test true;
+#     echo 'Registering Prover 8...';
+# RSA_SEED=492b3ff6b32fc3fe3fd19dfbfe50356a12ec804b1914362e6d313dae3e8bc081 \
+# SECP256K1_SEED=7249c5b72ef8ad7e7d5d943698a9f73c30f1a4625d7380ffaa0339efb0956eb6 \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8089/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0x2a871d0798f97d79848a013d4936a73bf4cc922c825d33c1cf7073dff6d409c6 \
+#     --multiaddr /ip4/127.0.0.1/udp/8089/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8089 \
+#     --test true;
 
-    echo 'Registering Prover 9...';
-RSA_SEED=550427bbc52ef207950f49624c92ea64b6af2f369a390c8da1453c97dc13d0a0 \
-SECP256K1_SEED=7b88fe6edb3bd6f28877bf923faf243b2dc0fbddfecb856fa4f68c0809fbbf9b \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8090/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0xf214f2b2cd398c806f84e317254e0f0b801d0643303237d97a22a48e01628897 \
-    --multiaddr /ip4/127.0.0.1/udp/8090/quic-v1 \
-    --rpcaddr http://127.0.0.1:8090 \
-    --test true;
+#     echo 'Registering Prover 9...';
+# RSA_SEED=550427bbc52ef207950f49624c92ea64b6af2f369a390c8da1453c97dc13d0a0 \
+# SECP256K1_SEED=7b88fe6edb3bd6f28877bf923faf243b2dc0fbddfecb856fa4f68c0809fbbf9b \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8090/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0xf214f2b2cd398c806f84e317254e0f0b801d0643303237d97a22a48e01628897 \
+#     --multiaddr /ip4/127.0.0.1/udp/8090/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8090 \
+#     --test true;
 
-    echo 'Registering Prover 10...';
-RSA_SEED=94631675ea762a5d89ef8827c7984cedb6bc5e6763679891e71cf66d02141fdf \
-SECP256K1_SEED=c04fbd53c776c0c3f78449436f4bd3a373b38162e086a0283d826bd8df2e8c57 \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8091/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0x701b615bbdfb9de65240bc28bd21bbc0d996645a3dd57e7b12bc2bdf6f192c82 \
-    --multiaddr /ip4/127.0.0.1/udp/8091/quic-v1 \
-    --rpcaddr http://127.0.0.1:8091 \
-    --test true;
+#     echo 'Registering Prover 10...';
+# RSA_SEED=94631675ea762a5d89ef8827c7984cedb6bc5e6763679891e71cf66d02141fdf \
+# SECP256K1_SEED=c04fbd53c776c0c3f78449436f4bd3a373b38162e086a0283d826bd8df2e8c57 \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8091/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0x701b615bbdfb9de65240bc28bd21bbc0d996645a3dd57e7b12bc2bdf6f192c82 \
+#     --multiaddr /ip4/127.0.0.1/udp/8091/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8091 \
+#     --test true;
 
-    echo 'Registering Prover 11...';
-RSA_SEED=eb019c29b7d75148e3740c4132665bc904b32251b2eae1e88628ce5604558a01 \
-SECP256K1_SEED=9c7fad54205512c915e726d78a01879529f2ac9b2e86d35b5916ab128d2826c4 \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8092/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0xa267530f49f8280200edf313ee7af6b827f2a8bce2897751d06a843f644967b1 \
-    --multiaddr /ip4/127.0.0.1/udp/8092/quic-v1 \
-    --rpcaddr http://127.0.0.1:8092 \
-    --test true;
+#     echo 'Registering Prover 11...';
+# RSA_SEED=eb019c29b7d75148e3740c4132665bc904b32251b2eae1e88628ce5604558a01 \
+# SECP256K1_SEED=9c7fad54205512c915e726d78a01879529f2ac9b2e86d35b5916ab128d2826c4 \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8092/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0xa267530f49f8280200edf313ee7af6b827f2a8bce2897751d06a843f644967b1 \
+#     --multiaddr /ip4/127.0.0.1/udp/8092/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8092 \
+#     --test true;
 
-    echo 'Registering Prover 12...';
-RSA_SEED=7b917c2886e3e75215f33a978e01bbffadb29ca878ae65dd1e7b63266447e281 \
-SECP256K1_SEED=5f7753d608fd3e4c7fec8216ecc6f178a07e6bac7d4076ec2393fdaec857d8e4 \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8093/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0x47c99abed3324a2707c28affff1267e45918ec8c3f20b8aa892e8b065d2942dd \
-    --multiaddr /ip4/127.0.0.1/udp/8093/quic-v1 \
-    --rpcaddr http://127.0.0.1:8093 \
-    --test true;
+#     echo 'Registering Prover 12...';
+# RSA_SEED=7b917c2886e3e75215f33a978e01bbffadb29ca878ae65dd1e7b63266447e281 \
+# SECP256K1_SEED=5f7753d608fd3e4c7fec8216ecc6f178a07e6bac7d4076ec2393fdaec857d8e4 \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8093/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0x47c99abed3324a2707c28affff1267e45918ec8c3f20b8aa892e8b065d2942dd \
+#     --multiaddr /ip4/127.0.0.1/udp/8093/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8093 \
+#     --test true;
 
-    echo 'Registering Prover 13...';
-RSA_SEED=47b2ab505b041354d49ba74ea89fbeb4ad1efd1cb7d713d8d5c7d33d68980433 \
-SECP256K1_SEED=9bba70acb11ed82ca52517956bdfc5486cc85e9dfbafbab618a70928bbb2cae0 \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8094/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0xc526ee95bf44d8fc405a158bb884d9d1238d99f0612e9f33d006bb0789009aaa \
-    --multiaddr /ip4/127.0.0.1/udp/8094/quic-v1 \
-    --rpcaddr http://127.0.0.1:8094 \
-    --test true;
+#     echo 'Registering Prover 13...';
+# RSA_SEED=47b2ab505b041354d49ba74ea89fbeb4ad1efd1cb7d713d8d5c7d33d68980433 \
+# SECP256K1_SEED=9bba70acb11ed82ca52517956bdfc5486cc85e9dfbafbab618a70928bbb2cae0 \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8094/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0xc526ee95bf44d8fc405a158bb884d9d1238d99f0612e9f33d006bb0789009aaa \
+#     --multiaddr /ip4/127.0.0.1/udp/8094/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8094 \
+#     --test true;
 
-    echo 'Registering Prover 14...';
-RSA_SEED=f8b1cacf86133a2107ddc1614591db0988927e6b0078a62cea2e84da11442b55 \
-SECP256K1_SEED=dbebe0c0c406bc5f29464de1257cc744eeb57b41f12be36ea62b2e113af9ddaa \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8095/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0x8166f546bab6da521a8369cab06c5d2b9e46670292d85c875ee9ec20e84ffb61 \
-    --multiaddr /ip4/127.0.0.1/udp/8095/quic-v1 \
-    --rpcaddr http://127.0.0.1:8095 \
-    --test true;
+#     echo 'Registering Prover 14...';
+# RSA_SEED=f8b1cacf86133a2107ddc1614591db0988927e6b0078a62cea2e84da11442b55 \
+# SECP256K1_SEED=dbebe0c0c406bc5f29464de1257cc744eeb57b41f12be36ea62b2e113af9ddaa \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8095/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0x8166f546bab6da521a8369cab06c5d2b9e46670292d85c875ee9ec20e84ffb61 \
+#     --multiaddr /ip4/127.0.0.1/udp/8095/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8095 \
+#     --test true;
 
-    echo 'Registering Prover 15...';
-RSA_SEED=404c901fb7e932200774f0ebb32798b6f6962dd42120d4b2d968f7149a788959 \
-SECP256K1_SEED=9dbe94ef5e0d328f2ea2cc5d0e82ee5c2dc2af438e90ae978e4124c0c014d194 \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8096/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0xea6c44ac03bff858b476bba40716402b03e41b8e97e276d1baec7c37d42484a0 \
-    --multiaddr /ip4/127.0.0.1/udp/8096/quic-v1 \
-    --rpcaddr http://127.0.0.1:8096 \
-    --test true;
+#     echo 'Registering Prover 15...';
+# RSA_SEED=404c901fb7e932200774f0ebb32798b6f6962dd42120d4b2d968f7149a788959 \
+# SECP256K1_SEED=9dbe94ef5e0d328f2ea2cc5d0e82ee5c2dc2af438e90ae978e4124c0c014d194 \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8096/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0xea6c44ac03bff858b476bba40716402b03e41b8e97e276d1baec7c37d42484a0 \
+#     --multiaddr /ip4/127.0.0.1/udp/8096/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8096 \
+#     --test true;
 
-    echo 'Registering Prover 16...';
-RSA_SEED=b1f0b61c5e4ec3b2b920c7a5e4a8c0a347f42714054b404d2a506945497de967 \
-SECP256K1_SEED=2cffc6499a1a320eed36627ca8be3dab256a362b56e7ae02ff5abba4d7b5189b \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8097/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0x689af8efa8c651a91ad287602527f3af2fe9f6501a7ac4b061667b5a93e037fd \
-    --multiaddr /ip4/127.0.0.1/udp/8097/quic-v1 \
-    --rpcaddr http://127.0.0.1:8097 \
-    --test true;
+#     echo 'Registering Prover 16...';
+# RSA_SEED=b1f0b61c5e4ec3b2b920c7a5e4a8c0a347f42714054b404d2a506945497de967 \
+# SECP256K1_SEED=2cffc6499a1a320eed36627ca8be3dab256a362b56e7ae02ff5abba4d7b5189b \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8097/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0x689af8efa8c651a91ad287602527f3af2fe9f6501a7ac4b061667b5a93e037fd \
+#     --multiaddr /ip4/127.0.0.1/udp/8097/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8097 \
+#     --test true;
 
-echo 'Registering Prover 17...';
-RSA_SEED=5a6c448104995c3201079b9dbc09d39b7533ef3f9f04f784ac7aea04f93a6df2 \
-SECP256K1_SEED=7fc89084c783882a9054f22a1fe04035c77ca14d7e4dfea6c28b3b5f757229bb \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8098/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0xde9be858da4a475276426320d5e9262ecfc3ba460bfac56360bfa6c4c28b4ee0 \
-    --multiaddr /ip4/127.0.0.1/udp/8098/quic-v1 \
-    --rpcaddr http://127.0.0.1:8098 \
-    --test true;
+# echo 'Registering Prover 17...';
+# RSA_SEED=5a6c448104995c3201079b9dbc09d39b7533ef3f9f04f784ac7aea04f93a6df2 \
+# SECP256K1_SEED=7fc89084c783882a9054f22a1fe04035c77ca14d7e4dfea6c28b3b5f757229bb \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8098/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0xde9be858da4a475276426320d5e9262ecfc3ba460bfac56360bfa6c4c28b4ee0 \
+#     --multiaddr /ip4/127.0.0.1/udp/8098/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8098 \
+#     --test true;
 
-    echo 'Registering Prover 18...';
-RSA_SEED=8f82c7b262774d961403e7f1410e74a8a3ab7d71828c847a612d7bf9e6ab5a69 \
-SECP256K1_SEED=c3e12259a88eb7c2ca121b5040a6a44d4efafcc66e6b726580a96a9adf75e2a0 \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8099/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0xdf57089febbacf7ba0bc227dafbffa9fc08a93fdc68e1e42411a14efcf23656e \
-    --multiaddr /ip4/127.0.0.1/udp/8099/quic-v1 \
-    --rpcaddr http://127.0.0.1:8099 \
-    --test true;
+#     echo 'Registering Prover 18...';
+# RSA_SEED=8f82c7b262774d961403e7f1410e74a8a3ab7d71828c847a612d7bf9e6ab5a69 \
+# SECP256K1_SEED=c3e12259a88eb7c2ca121b5040a6a44d4efafcc66e6b726580a96a9adf75e2a0 \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8099/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0xdf57089febbacf7ba0bc227dafbffa9fc08a93fdc68e1e42411a14efcf23656e \
+#     --multiaddr /ip4/127.0.0.1/udp/8099/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8099 \
+#     --test true;
 
-    echo 'Registering Prover 19...';
-RSA_SEED=87f57bdcd4c3be80fe7a43780a35d563d688dd47389b831d093a85888cbfc2ce \
-SECP256K1_SEED=43c00ba840e2a3fa15f59fe5940779fbf15239d6f00147732b51014dca08d189 \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8100/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0xeaa861a9a01391ed3d587d8a5a84ca56ee277629a8b02c22093a419bf240e65d \
-    --multiaddr /ip4/127.0.0.1/udp/8100/quic-v1 \
-    --rpcaddr http://127.0.0.1:8100 \
-    --test true;
+#     echo 'Registering Prover 19...';
+# RSA_SEED=87f57bdcd4c3be80fe7a43780a35d563d688dd47389b831d093a85888cbfc2ce \
+# SECP256K1_SEED=43c00ba840e2a3fa15f59fe5940779fbf15239d6f00147732b51014dca08d189 \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8100/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0xeaa861a9a01391ed3d587d8a5a84ca56ee277629a8b02c22093a419bf240e65d \
+#     --multiaddr /ip4/127.0.0.1/udp/8100/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8100 \
+#     --test true;
 
-    echo 'Registering Prover 20...';
-RSA_SEED=ab0d983e3be972f81806e34d111385beae4162dd0ac478df11a17e7b9844d094 \
-SECP256K1_SEED=2e57cde74bc9b2d207baa42463242cdb15f0fb3efb7b88ccad05ee46ce6884dd \
-NODE_TYPE=Prover \
-NODE_MULTIADDR=/ip4/127.0.0.108/udp/8101/quic-v1 \
-$WORKDIR/../../network/target/release/registry_iface register \
-    --rpc-url http://127.0.0.1:8540 \
-    --private-key 0xc511b2aa70776d4ff1d376e8537903dae36896132c90b91d52c1dfbae267cd8b \
-    --multiaddr /ip4/127.0.0.1/udp/8101/quic-v1 \
-    --rpcaddr http://127.0.0.1:8101 \
-    --test true;
+#     echo 'Registering Prover 20...';
+# RSA_SEED=ab0d983e3be972f81806e34d111385beae4162dd0ac478df11a17e7b9844d094 \
+# SECP256K1_SEED=2e57cde74bc9b2d207baa42463242cdb15f0fb3efb7b88ccad05ee46ce6884dd \
+# NODE_TYPE=Prover \
+# NODE_MULTIADDR=/ip4/127.0.0.108/udp/8101/quic-v1 \
+# $WORKDIR/../../network/target/release/registry_iface register \
+#     --rpc-url http://127.0.0.1:8540 \
+#     --private-key 0xc511b2aa70776d4ff1d376e8537903dae36896132c90b91d52c1dfbae267cd8b \
+#     --multiaddr /ip4/127.0.0.1/udp/8101/quic-v1 \
+#     --rpcaddr http://127.0.0.1:8101 \
+#     --test true;

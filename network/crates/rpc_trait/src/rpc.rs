@@ -6,8 +6,8 @@ use messages::message::ElectionParams;
 use messages::network_utils::RequestToNetwork;
 use messages::types::{ElectionResponse, NodeResponse, Response, StateRequest, StateResponse};
 /// This trait defines the RPC methods for the Human Network service.
-/// The RPC methods are defined under the `human` namespace, and the trait can be used to implement both client and server functionality.
-#[rpc(client, server, namespace = "human")]
+/// The RPC methods are defined under the `mishti` namespace, and the trait can be used to implement both client and server functionality.
+#[rpc(client, server, namespace = "mishti")]
 #[async_trait::async_trait]
 pub trait HumanRpc {
     /// Fetches the state based on the provided `StateRequest`.
@@ -212,4 +212,14 @@ pub trait HumanRpc {
     /// Returns a `Result` containing either the `Response` on success or an `ErrorObjectOwned` on failure.
     #[method(name = "get_election_params")]
     async fn get_election_params(&self) -> Result<NodeResponse, ErrorObjectOwned>;
+
+    /// Fetches the current finalized group public keys (one per method) from the relay node.
+    /// Keys are hex-encoded encoded points, keyed by method name (e.g. "DecryptBabyJubjub").
+    /// These change after every DKG or resharing round.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing `NodeResponse::Keyshare(HashMap<String, String>)` on success.
+    #[method(name = "get_pubkey")]
+    async fn get_pubkey(&self) -> Result<NodeResponse, ErrorObjectOwned>;
 }

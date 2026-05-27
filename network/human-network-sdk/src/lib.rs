@@ -23,17 +23,45 @@ use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 // use wasm_bindgen_test::console_log;
-use std::{collections::HashMap, fmt::Display, str::FromStr, thread::sleep, time::Duration};
+use std::{collections::HashMap, fmt::Display, str::FromStr};
 use wasm_bindgen::prelude::*;
+use wasm_bindgen_futures::JsFuture;
 extern crate console_error_panic_hook;
 use std::panic;
 mod utils;
 use web_sys::console;
 
+// Strictly for development. Set to true to enable logs
+const ENABLE_LOGS: bool = false;
+macro_rules! log {
+    ($($arg:tt)*) => {
+        if ENABLE_LOGS {
+            console::log_1(&format!($($arg)*).into());
+        }
+    };
+}
+
 #[wasm_bindgen]
 pub fn enable_errors() { panic::set_hook(Box::new(console_error_panic_hook::hook)); }
-// TODO: Make sure this is correct
-const RELAY_URL: &'static str = "http://159.65.246.91:3031"; // http://localhost:3031
+// const RELAY_URL: &'static str = "http://159.65.246.91:3031"; // http://localhost:3031
+// const RELAY_URL: &'static str = "http://0.0.0.0:8081";
+// Mainnet
+const RELAY_URL: &'static str = "http://44.217.242.218:8081";
+const POLL_INTERVAL_MS: i32 = 2000;
+const MAX_POLL_ATTEMPTS: u32 = 30;
+
+async fn async_sleep(ms: i32) {
+    let promise = js_sys::Promise::new(&mut |resolve, _| {
+        let global = js_sys::global();
+        let set_timeout = js_sys::Reflect::get(&global, &JsValue::from_str("setTimeout"))
+            .expect("setTimeout not found")
+            .dyn_into::<js_sys::Function>()
+            .expect("setTimeout is not a function");
+        set_timeout.call2(&JsValue::NULL, &resolve, &JsValue::from(ms)).unwrap();
+    });
+    JsFuture::from(promise).await.unwrap();
+}
+
 fn to_js_err<E: Display>(e: E) -> JsError { JsError::new(&e.to_string()) }
 // const TO_JS_ERR: Fn(dyn Error) -> JsError = |e| JsError::new(&e.to_string());
 // fn map_jserr<T, E: Display>(e: Result<T, E>) -> Result<T, JsError> {
@@ -58,12 +86,12 @@ fn to_js_err<E: Display>(e: E) -> JsError { JsError::new(&e.to_string()) }
 //     },
 // }
 
-/// Deployed version, as of June 26, 2024
+/// Matches network/crates/messages/src/network_utils.rs StateResponse
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StateResponse {
     epoch: u32,
     method: Method,
-    requests_from_user: u32,
+    requests_from_user: u128,
 }
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub enum Method {
@@ -127,10 +155,6 @@ impl RequestToNetwork {
 // generate oprf specific structs and consts
 
 lazy_static! {
-    pub static ref NETWORK_BABYJUB_PUBKEY: <BabyJubJub as Curve<32>>::Point = <BabyJubJub as Curve<32>>::Point::from_encoded(
-        &hex::decode("012000000000000000153e6e97edfbd87c5c559b6ef4941e4f89bea681575b1252afccdfce6bbe682f").unwrap()
-        // &hex::decode("012000000000000000469835755a0b099d9bb4d2d3da120c91bee97617ae71a18312a5c75550fad60a").unwrap()
-    ).unwrap();
     pub static ref CONDITIONS_CONTRACT: H160 = "0x248002ce5220b12d87bdbe148e04ee4bf29682f4".parse().unwrap();
     pub static ref HTTP_CLIENT: Client = reqwest::ClientBuilder::new()
         .build()
@@ -147,6 +171,18 @@ struct JsonRpcResponse {
     jsonrpc: String,
     id: u64,
     result: MessageStateResponse,
+}
+
+#[derive(Deserialize)]
+struct JsonRpcStateResponse {
+    result: Option<MessageStateResponse>,
+    error: Option<JsonRpcError>,
+}
+
+#[derive(Deserialize, Debug)]
+struct JsonRpcError {
+    code: i64,
+    message: String,
 }
 
 #[derive(Deserialize)]
@@ -226,10 +262,96 @@ pub fn msg_to_point(msg: &[u8]) -> String {
     let mut padded_msg = [0u8; 24];
     padded_msg[24 - msg.len()..].copy_from_slice(msg);
     let point = BabyJubJub::koblitz_map(&padded_msg).unwrap();
-    // Convert to twisted Edwards form for circom compatibility.
-    // Circom uses twisted Edwards (a=168700), arkworks uses standard Edwards (a=1).
-    let twisted = point.edwards_to_twisted();
-    twisted.to_string()
+    // Return in standard Edwards form (a=1). The V3CleanHands circuit applies
+    // UntwistedToTwisted() itself before passing to EncryptElGamal/BabyCheck.
+    point.to_string()
+}
+
+/// Fetches the current BabyJubJub decryption public key from the relay node.
+/// The key changes after every DKG or resharing round, so call this before encrypting
+/// rather than relying on any hardcoded value.
+/// Returns the hex-encoded encoded point — pass it directly to `encrypt()`.
+#[wasm_bindgen]
+pub async fn get_network_babyjub_pubkey(relay_url: String) -> String {
+    let payload = json!({
+        "jsonrpc": "2.0",
+        "method": "mishti_get_pubkey",
+        "params": [],
+        "id": 1
+    });
+    let response_text = HTTP_CLIENT
+        .post(&relay_url)
+        .json(&payload)
+        .send()
+        .await
+        .expect("Failed to send get_pubkey request")
+        .text()
+        .await
+        .expect("Failed to read get_pubkey response");
+    log!("[get_network_babyjub_pubkey] raw response: {}", response_text);
+    let rpc_response: JsonRpcNodeResponse = serde_json::from_str(&response_text)
+        .unwrap_or_else(|e| panic!("Failed to parse get_pubkey response: {}. Raw: {}", e, response_text));
+    match rpc_response.result {
+        NodeResponse::Keyshare(map) => map
+            .get("DecryptBabyJubjub")
+            .expect("DecryptBabyJubjub key not found in network pubkeys")
+            .clone(),
+        NodeResponse::Error { message } => panic!("Network error fetching pubkey: {}", message),
+        _ => panic!("Unexpected response from mishti_get_pubkey"),
+    }
+}
+
+lazy_static! {
+    /// Caches the network's finalized BabyJubJub group public key after the first
+    /// `get_pubkey` fetch so we don't re-query the relay on every decrypt request.
+    static ref NETWORK_BABYJUB_PUBKEY: std::sync::OnceLock<<BabyJubJub as Curve<32>>::Point> = std::sync::OnceLock::new();
+}
+
+async fn network_babyjub_pubkey(relay_url: &str) -> <BabyJubJub as Curve<32>>::Point {
+    if let Some(pubkey) = NETWORK_BABYJUB_PUBKEY.get() {
+        return *pubkey;
+    }
+    let pubkey_hex = get_network_babyjub_pubkey(relay_url.to_string()).await;
+    let pubkey_bytes = hex::decode(&pubkey_hex).expect("Failed to hex-decode network BabyJubJub pubkey");
+    let pubkey = <BabyJubJub as Curve<32>>::Point::from_encoded(&pubkey_bytes).expect("Failed to decode network BabyJubJub pubkey point");
+    let _ = NETWORK_BABYJUB_PUBKEY.set(pubkey);
+    pubkey
+}
+
+/// Encrypts a message to a BabyJubJub public key using ElGamal encryption, binding
+/// the access-control contract into a Schnorr signature over the ephemeral key.
+/// Returns a JSON object whose fields are ready to pass directly to `decrypt()`:
+///   - `ciphertext`: `{ c1: { x, y }, c2: { x, y } }` — decimal coordinate strings (standard Edwards form)
+///   - `contract`: the conditions contract address
+///   - `sig`: Schnorr signature JSON string (`{ R, s }`)
+/// * `pubkey_hex` - Hex-encoded encoded BabyJubJub point (from `get_network_babyjub_pubkey`)
+/// * `msg_hex` - Hex-encoded plaintext, at most 24 bytes (left-padded with zeros if shorter)
+/// * `conditions_contract` - Address of the access-control contract
+#[wasm_bindgen]
+pub fn encrypt(pubkey_hex: String, msg_hex: String, conditions_contract: String) -> String {
+    let pubkey_bytes = hex::decode(&pubkey_hex).expect("invalid pubkey hex");
+    let pubkey = <BabyJubJub as Curve<32>>::Point::from_encoded(&pubkey_bytes).expect("invalid pubkey encoding");
+    let msg_bytes = hex::decode(&msg_hex).expect("invalid msg hex");
+    assert!(msg_bytes.len() <= 24, "message must be at most 24 bytes");
+    let mut padded = [0u8; 24];
+    padded[24 - msg_bytes.len()..].copy_from_slice(&msg_bytes);
+    let parsed_contract = conditions_contract.parse::<Address>().expect("invalid conditions contract address");
+    let enc = encrypt_with_conditions(&padded, &pubkey, parsed_contract).unwrap();
+    let c1_x: BigUint = enc.ciphertext.ephemeral_dh_pubkey.x.into_bigint().into();
+    let c1_y: BigUint = enc.ciphertext.ephemeral_dh_pubkey.y.into_bigint().into();
+    let c2_x: BigUint = enc.ciphertext.encrypted_msg.x.into_bigint().into();
+    let c2_y: BigUint = enc.ciphertext.encrypted_msg.y.into_bigint().into();
+    // c1_hash = keccak256(c1.encode()) — the exact value the conditions contract's canDecrypt receives
+    let c1_hash = ethers::utils::keccak256(enc.ciphertext.ephemeral_dh_pubkey.encode());
+    serde_json::to_string(&serde_json::json!({
+        "ciphertext": {
+            "c1": { "x": c1_x.to_string(), "y": c1_y.to_string() },
+            "c2": { "x": c2_x.to_string(), "y": c2_y.to_string() }
+        },
+        "contract": format!("0x{}", hex::encode(enc.signed_conditions.contract.as_bytes())),
+        "sig": serde_json::to_string(&enc.signed_conditions.sig).unwrap(),
+        "c1_hash": format!("0x{}", hex::encode(c1_hash))
+    })).unwrap()
 }
 
 /// Converts an encoded BabyJubJub public key to (x, y) decimal strings in twisted Edwards form,
@@ -246,17 +368,36 @@ pub fn pubkey_to_circom_format(encoded_pubkey_hex: String) -> String {
     serde_json::to_string(&serde_json::json!([x.to_string(), y.to_string()])).unwrap()
 }
 pub async fn request_user_state(method: Method, address: Address) -> StateResponse {
-    let body = serde_json::to_string(&StateRequest { method, user: address }).unwrap();
-    HTTP_CLIENT
-        .post(format!("{}/user-state/", RELAY_URL))
-        .header("Content-Type", "application/json")
-        .body(body)
+    let state_req = StateRequest { method, user: address };
+    let payload = json!({
+        "jsonrpc": "2.0",
+        "method": "mishti_fetch_state",
+        "params": [state_req],
+        "id": 1
+    });
+    let response_text = HTTP_CLIENT
+        .post(RELAY_URL)
+        .json(&payload)
         .send()
         .await
         .unwrap()
-        .json::<StateResponse>()
+        .text()
         .await
-        .unwrap()
+        .unwrap();
+    log!("[request_user_state] raw response: {}", response_text);
+    let rpc_response: JsonRpcStateResponse = serde_json::from_str(&response_text)
+        .unwrap_or_else(|e| panic!("Failed to parse JSON-RPC response: {}. Raw: {}", e, response_text));
+    if let Some(err) = rpc_response.error {
+        panic!("JSON-RPC error (code {}): {}. Raw: {}", err.code, err.message, response_text);
+    }
+    match rpc_response.result.expect("JSON-RPC response has neither result nor error") {
+        MessageStateResponse::Success { epoch, method, requests_from_user } => {
+            StateResponse { epoch, method, requests_from_user }
+        }
+        MessageStateResponse::Error { message } => {
+            panic!("Error getting user state: {}", message);
+        }
+    }
 }
 /// * `method` - Either OPRFSecp256k1 or DecryptBabyJubJub
 /// * `address` - Address of the user
@@ -284,18 +425,18 @@ pub async fn sign_request_to_network(request: String, private_key: String) -> St
 fn parse_decrypt_args(human_user_privkey: String, ciphertext: String, conditions_contract: String, sig: String) -> (LocalWallet, ElGamalCiphertextWithSignedConditions) {
     let wallet = LocalWallet::from_str(&human_user_privkey).expect("Failed to parse private key");
     let ciphertext = serde_json::from_str::<CiphertextInput>(&ciphertext).expect("invalid ciphertext");
-    // Ciphertext points from circom are in twisted Edwards form (a=168700, d=168696).
-    // Arkworks uses standard Edwards form (a=1). Apply twisted_to_edwards() to convert.
+    // Ciphertext points from the circuit are already in standard Edwards form (a=1),
+    // because V3CleanHands applies TwistedToUntwisted() before outputting encryptions.
     let ephemeral_dh_pubkey = Affine::<EdwardsConfig> {
         x: BigUint::from_str(ciphertext.c1.x.as_str()).expect("invalid x coordinate").into(),
         y: BigUint::from_str(ciphertext.c1.y.as_str()).expect("invalid y coordinate").into(),
-    }.twisted_to_edwards();
-    assert!(ephemeral_dh_pubkey.is_on_curve(), "ephemeral_dh_pubkey is not on the curve after twist conversion");
+    };
+    assert!(ephemeral_dh_pubkey.is_on_curve(), "ephemeral_dh_pubkey is not on the curve");
     let encrypted_msg = Affine::<EdwardsConfig> {
         x: BigUint::from_str(ciphertext.c2.x.as_str()).expect("invalid x coordinate").into(),
         y: BigUint::from_str(ciphertext.c2.y.as_str()).expect("invalid y coordinate").into(),
-    }.twisted_to_edwards();
-    assert!(encrypted_msg.is_on_curve(), "encrypted_msg is not on the curve after twist conversion");
+    };
+    assert!(encrypted_msg.is_on_curve(), "encrypted_msg is not on the curve");
     let ciphertext = ElGamalCiphertext::<32, BabyJubJub> { encrypted_msg, ephemeral_dh_pubkey };
     let parsed_contract = conditions_contract.parse::<Address>().expect("invalid conditions contract address");
     let parsed_sig = serde_json::from_str::<SchnorrSig<32, BabyJubJub>>(&sig).expect("invalid signature");
@@ -331,9 +472,13 @@ pub struct CiphertextInput {
 ///           { R: string, s: string }
 #[wasm_bindgen]
 pub async fn decrypt(human_user_privkey: String, ciphertext: String, conditions_contract: String, sig: String) -> String {
+    log!("[decrypt] parsing args...");
     let (wallet, ciphertext_with_signed_conditions) = parse_decrypt_args(human_user_privkey, ciphertext, conditions_contract, sig);
+    log!("[decrypt] args parsed. wallet address: {:?}", wallet.address());
     // Get the state of the network, how many requests we can send
+    log!("[decrypt] requesting user state...");
     let state = request_user_state(Method::DecryptBabyJubJub, wallet.address()).await;
+    log!("[decrypt] user state received. epoch: {}, requests_from_user: {}", state.epoch, state.requests_from_user);
     // if let StateResponse::Error { message } = state {
     //     panic!("Error getting user state: {}", message);
     // }
@@ -343,35 +488,104 @@ pub async fn decrypt(human_user_privkey: String, ciphertext: String, conditions_
     //     requests_from_user,
     // } = state {
     // Prepare the request
+    log!("[decrypt] preparing request to network...");
     let req = RequestToNetwork {
         method: state.method,
         epoch: state.epoch,
-        request_per_user: state.requests_from_user as u128 + 1,
+        request_per_user: state.requests_from_user + 1,
         point: ciphertext_with_signed_conditions.ciphertext.ephemeral_dh_pubkey.encode(),
         signature: None,
         extra_data: bincode::serialize(&ciphertext_with_signed_conditions).ok(),
     }
     .signed(wallet.clone())
     .await;
-    // Send the request to the relay node
+    // Send the request to the network via JSON-RPC
+    log!("[decrypt] sending request to {}...", RELAY_URL);
+    let payload = json!({
+        "jsonrpc": "2.0",
+        "method": "mishti_threshold_mul",
+        "params": [req],
+        "id": 1
+    });
     let res = HTTP_CLIENT
-        .post(format!("{}/relay-DecryptBabyJubJub", RELAY_URL))
-        .header("Content-Type", "application/json")
-        .body(serde_json::to_string(&req).unwrap())
+        .post(RELAY_URL)
+        .json(&payload)
         .send()
         .await
         .unwrap()
         .text()
         .await
         .unwrap();
-    // Get the Diffie Hellman Shared secret. This will be the network's public key if you encrypted with a secret key of 1
-    let shared_sec = <BabyJubJub as Curve<32>>::Point::from_encoded(&hex::decode(res).unwrap()).unwrap();
-    // Decrypt the ciphertext using the shared secret
-    let output = decrypt_elgamal_from_shared_secret(&ciphertext_with_signed_conditions.ciphertext, &shared_sec).unwrap();
-    BigUint::from_bytes_be(output.as_ref()).to_string()
-    // } else {
-    //     panic!("Invalid state response");
-    // }
+    log!("[decrypt] response received ({} bytes): {}", res.len(), res);
+    let rpc_response: JsonRpcNodeResponse = serde_json::from_str(&res)
+        .unwrap_or_else(|e| panic!("Failed to parse JSON-RPC node response: {}. Raw: {}", e, res));
+    if let NodeResponse::VerifiedProofBabyJubJub { reconstructed_point, .. } = rpc_response.result {
+        log!("[decrypt] got reconstructed point, decoding shared secret...");
+        let shared_sec_bytes = bincode::serialize(&reconstructed_point).unwrap();
+        let shared_sec = <BabyJubJub as Curve<32>>::Point::from_encoded(&shared_sec_bytes).unwrap();
+        log!("[decrypt] shared secret decoded. decrypting ciphertext...");
+        let output = decrypt_elgamal_from_shared_secret(&ciphertext_with_signed_conditions.ciphertext, &shared_sec).unwrap();
+        log!("[decrypt] decryption successful!");
+        BigUint::from_bytes_be(output.as_ref()).to_string()
+    } else if let NodeResponse::Submitted { request_id } = rpc_response.result {
+        log!("[decrypt] request submitted, polling for result. request_id: {}", request_id);
+        let mut attempts = 0;
+        loop {
+            attempts += 1;
+            if attempts > MAX_POLL_ATTEMPTS {
+                panic!("Polling timed out after {} attempts for request_id: {}", MAX_POLL_ATTEMPTS, request_id);
+            }
+            async_sleep(POLL_INTERVAL_MS).await;
+            log!("[decrypt] polling attempt {}/{}...", attempts, MAX_POLL_ATTEMPTS);
+            let poll_payload = json!({
+                "jsonrpc": "2.0",
+                "method": "mishti_fetch_threshold_mul_result",
+                "params": [request_id],
+                "id": 1
+            });
+            let poll_res = HTTP_CLIENT
+                .post(RELAY_URL)
+                .json(&poll_payload)
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            log!("[decrypt] poll response: {}", poll_res);
+            let poll_response: JsonRpcNodeResponse = serde_json::from_str(&poll_res)
+                .unwrap_or_else(|e| panic!("Failed to parse poll response: {}. Raw: {}", e, poll_res));
+            match poll_response.result {
+                NodeResponse::VerifiedProofBabyJubJub { reconstructed_point, .. } => {
+                    log!("[decrypt] got reconstructed point from polling, decoding shared secret...");
+                    let shared_sec_bytes = bincode::serialize(&reconstructed_point).unwrap();
+                    let shared_sec = <BabyJubJub as Curve<32>>::Point::from_encoded(&shared_sec_bytes).unwrap();
+                    log!("[decrypt] shared secret decoded. decrypting ciphertext...");
+                    let output = decrypt_elgamal_from_shared_secret(&ciphertext_with_signed_conditions.ciphertext, &shared_sec).unwrap();
+                    log!("[decrypt] decryption successful!");
+                    return BigUint::from_bytes_be(output.as_ref()).to_string();
+                }
+                NodeResponse::Submitted { .. } => {
+                    log!("[decrypt] result not ready yet, will retry...");
+                    continue;
+                }
+                NodeResponse::Error { message } if message == "Not yet verified" => {
+                    log!("[decrypt] not yet verified, will retry...");
+                    continue;
+                }
+                NodeResponse::Error { message } => {
+                    panic!("Node error while polling: {}", message);
+                }
+                other => {
+                    panic!("Unexpected poll response: {:?}", other);
+                }
+            }
+        }
+    } else if let NodeResponse::Error { message } = rpc_response.result {
+        panic!("Node error: {}", message);
+    } else {
+        panic!("Unexpected response: {:?}", rpc_response.result);
+    }
 }
 #[wasm_bindgen]
 pub fn new_mask() -> JsValue { serde_wasm_bindgen::to_value(&Mask::<32, Secp256k1>::new()).unwrap() }
@@ -537,7 +751,8 @@ pub async fn handle_oprf_request(private_key: Option<String>, input: Option<Stri
         }
         Method::DecryptBabyJubJub => {
             let msg = &[123u8; 24];
-            let ciphertext_with_signed_conditions = encrypt_with_conditions(msg, &*NETWORK_BABYJUB_PUBKEY, *CONDITIONS_CONTRACT).unwrap();
+            let network_pubkey = network_babyjub_pubkey(&rpc_url).await;
+            let ciphertext_with_signed_conditions = encrypt_with_conditions(msg, &network_pubkey, *CONDITIONS_CONTRACT).unwrap();
             (
                 ciphertext_with_signed_conditions.ciphertext.ephemeral_dh_pubkey.encode(),
                 Some(bincode::serialize(&ciphertext_with_signed_conditions).unwrap()),
@@ -628,7 +843,7 @@ async fn compute_oprf<const N: usize, C: Curve<N>>(input: &str) -> (Vec<u8>, C::
 async fn fetch_state(client: &Client, rpc_url: &str, state_req: StateRequest) -> Result<MessageStateResponse, Box<dyn std::error::Error>> {
     let payload = json!({
         "jsonrpc": "2.0",
-        "method": "human_fetch_state",
+        "method": "mishti_fetch_state",
         "params": [state_req],
         "id": 1
     });
@@ -644,7 +859,7 @@ async fn fetch_state(client: &Client, rpc_url: &str, state_req: StateRequest) ->
 async fn send_request(client: &Client, rpc_url: &str, req: RequestToNetwork) -> Result<NodeResponse, Box<dyn std::error::Error>> {
     let payload = json!({
         "jsonrpc": "2.0",
-        "method": "human_threshold_mul",
+        "method": "mishti_threshold_mul",
         "params": [req],
         "id": 1
     });
@@ -659,7 +874,7 @@ async fn send_request(client: &Client, rpc_url: &str, req: RequestToNetwork) -> 
 async fn query_threshold_multiplication(client: &Client, rpc_url: &str, request_id: &str) -> Result<NodeResponse, Box<dyn std::error::Error>> {
     let payload = json!({
         "jsonrpc": "2.0",
-        "method": "human_threshold_mul",
+        "method": "mishti_threshold_mul",
         "params": [request_id],
         "id": 1
     });

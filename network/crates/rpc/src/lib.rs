@@ -706,4 +706,31 @@ impl HumanRpcServer for RpcServerImpl {
             }
         }
     }
+
+    
+    /// Handles the `get_pubkey` RPC request to retrieve the network public key.
+    ///
+    /// # Returns
+    ///
+    /// Returns a `Result` containing either the `Response` on success or an `ErrorObjectOwned` on failure.
+    async fn get_pubkey(&self) -> Result<NodeResponse, ErrorObjectOwned> {
+        info!("Received `get_pubkey` method");
+        let app_engine_status_actor: ActorRef<AppStateChangeMessage> =
+            get_actor_ref::<AppStateChangeMessage, AppStateEngineError>(ActorType::AppStateEngine).unwrap();
+        let (tx, rx) = oneshot::channel();
+        let _ = app_engine_status_actor
+            .call(|_: RpcReplyPort<NodeResponse>| AppStateChangeMessage::FetchFinalizedGroupPubkeys(tx), Some(Duration::from_millis(5000)))
+            .await
+            .map_err(|e| ErrorObjectOwned::owned(1, e.to_string(), Some("".to_string())))?;
+        match rx.await {
+            Ok(r) => Ok(r),
+            Err(e) => {
+                error!("Error occurred while fetching finalized group pubkeys: {:?}", e);
+                Ok(NodeResponse::Error {
+                    request_id: "".to_string(),
+                    message: "Something went wrong while processing the request".to_string(),
+                })
+            }
+        }
+    }
 }

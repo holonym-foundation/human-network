@@ -119,7 +119,7 @@ When Eigenlayer includes operator rewards, this accounting is used to determined
 
 1. Build registry_iface.
 
-        cd human
+        cd network
         cargo build --bin registry_iface
 
 2. Set `ANVIL_RPC_FOR_PEER_REGISTRY` env var to `http://localhost:8540`.
@@ -130,13 +130,13 @@ When Eigenlayer includes operator rewards, this accounting is used to determined
 
 4. Run nodes
 
-        cd human
+        cd network
         ./human_network.sh build
         ...
 
 5. Run your command.
 
-        cd human
+        cd network
         RUST_LOG=INFO ./target/debug/cli --input "usr:123" --private-key <private-key> --method OPRFSecp256k1 --rpc-url "http://0.0.0.0:8081"
 
 -------------------------------------------------

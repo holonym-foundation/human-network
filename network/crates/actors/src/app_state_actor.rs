@@ -991,6 +991,21 @@ impl Actor for AppStateEngineActor {
                     send_response::<NodeResponse>(sender, NodeResponse::Keyshare(private_keyshares_str), "Error sending response");
                 }
             }
+            AppStateChangeMessage::FetchFinalizedGroupPubkeys(sender) => {
+                if let Some(NodeState::Relay { finalized_group_public_keys, .. }) = &mut state.state {
+                    let pubkeys_hex: HashMap<String, String> = finalized_group_public_keys
+                        .iter()
+                        .map(|(k, v)| (k.clone(), hex::encode(v)))
+                        .collect();
+                    send_response::<NodeResponse>(sender, NodeResponse::Keyshare(pubkeys_hex), "Error sending FetchFinalizedGroupPubkeys response");
+                } else {
+                    send_response::<NodeResponse>(
+                        sender,
+                        NodeResponse::Error { request_id: "".to_string(), message: "Not a relay node or pubkeys not yet finalized".to_string() },
+                        "Error sending FetchFinalizedGroupPubkeys response",
+                    );
+                }
+            }
             AppStateChangeMessage::RestoreKeyShare(keyshares, sender) => {
                 if let Some(NodeState::Prover { common_state, private_keyshares, .. }) = &mut state.state {
                     let restored_keyshares: HashMap<String, Vec<u8>> = keyshares
@@ -2287,7 +2302,7 @@ async fn process_received_proof<const N: usize, C: Curve<N>>(state: &mut Option<
                     Method::OPRFSecp256k1 => "OPRFSecp256k1",
                     Method::OPRFBabyJubJub => "OPRFBabyJubJub",
                     Method::JWTPRFSecp256k1 => "JWTPRFSecp256k1",
-                    Method::DecryptBabyJubJub => "DecryptBabyJubJub",
+                    Method::DecryptBabyJubJub => "DecryptBabyJubjub",
                 };
 
                 let pub_key_share = match pubkey_shares_for_peer.get(pub_key_share) {
@@ -2550,7 +2565,7 @@ async fn process_request(state: &mut Option<NodeState>, request_id: &str, reques
             Method::DecryptBabyJubJub => handle_request!(
                 32,
                 BabyJubJub,
-                private_keyshares.get("DecryptBabyJubJub").expect("Decryption key share not found"),
+                private_keyshares.get("DecryptBabyJubjub").expect("Decryption key share not found"),
                 request_id,
                 request,
                 tx,
