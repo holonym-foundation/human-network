@@ -5,8 +5,8 @@
 function build_project {
     echo "Building project..."
     cargo build --release --package node --bin human_node -p actors --features "local_test_net" -p network --features "local_test_net"
-#    cargo build --release --package registry_iface --bin registry_iface
-#    cargo build --release --package cli --bin cli
+   cargo build --release --package registry_iface --bin registry_iface
+   cargo build --release --package cli --bin cli
     if [[ "$?" -ne 0 ]]; then
         echo "Error: Cargo build failed."
         exit 1

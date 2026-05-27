@@ -206,7 +206,7 @@ async fn create_request(wallet: LocalWallet, point: Vec<u8>, method: Method, epo
     .await
     .expect("Failed to sign request")
 }
-async fn send_request(client: &HttpClient, address: String, req: RequestToNetwork) -> NodeResponse { client.threshold_mul(req).await.expect("Failed to get OPRF response") }
+async fn send_request(client: &HttpClient, req: RequestToNetwork) -> NodeResponse { client.threshold_mul(req).await.expect("Failed to get OPRF response") }
 
 async fn process_response(client: &HttpClient, request_id: &str, mask: &Vec<u8>) {
     query_threshold_multiplication(client, request_id).await;
@@ -286,7 +286,7 @@ async fn handle_method(args: Args, method: Method) {
 
     if let StateResponse::Success { epoch, method, requests_from_user } = state {
         let req = create_request(wallet.clone(), point, method.clone(), epoch, requests_from_user, extra_data.clone()).await;
-        let response = send_request(&client, wallet.address().to_string(), req.clone()).await;
+        let response = send_request(&client, req.clone()).await;
         println!("Response: {:?}", response);
         match method {
             Method::OPRFSecp256k1 => match response {
