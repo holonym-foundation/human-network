@@ -33,6 +33,25 @@ diesel::table! {
 }
 
 diesel::table! {
+    operator_points_daily (operator, snapshot_time) {
+        operator -> Bytea,
+        snapshot_time -> Timestamptz,
+        cumulative_points -> Float8,
+    }
+}
+
+diesel::table! {
+    operator_points_ledger (id) {
+        id -> Int8,
+        operator -> Bytea,
+        task_id -> Int8,
+        role -> Text,
+        points -> Float8,
+        created_at -> Timestamptz,
+    }
+}
+
+diesel::table! {
     peer_reachability_quic (id) {
         id -> Int8,
         kafka_timestamp -> Nullable<Timestamptz>,
@@ -115,6 +134,7 @@ diesel::table! {
 }
 
 diesel::joinable!(multiplier_info -> quorum_resharing_info (quorum_info_id));
+diesel::joinable!(operator_points_ledger -> tasks (task_id));
 diesel::joinable!(task_attestors -> tasks (task_id));
 diesel::joinable!(task_performers -> tasks (task_id));
 
@@ -122,6 +142,8 @@ diesel::allow_tables_to_appear_in_same_query!(
     monitor_task_state,
     multiplier_info,
     multiplier_served_requests,
+    operator_points_daily,
+    operator_points_ledger,
     peer_reachability_quic,
     peer_reachability_tcp,
     quorum_resharing_info,

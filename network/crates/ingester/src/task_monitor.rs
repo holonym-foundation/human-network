@@ -1,10 +1,10 @@
 use crate::{
-    models::{NewMonitorTaskState, NewTask, NewTaskAttestor, NewTaskPerformer},
-    schema::{monitor_task_state, task_attestors, task_performers, tasks},
+    models::{NewMonitorTaskState, NewOperatorPointsLedger, NewTask, NewTaskAttestor, NewTaskPerformer},
+    schema::{monitor_task_state, operator_points_ledger, task_attestors, task_performers, tasks},
     PgPool,
 };
 use alloy::{
-    primitives::{Address, B256, U256},
+    primitives::{Address, Bytes, B256, U256},
     providers::{
         fillers::{BlobGasFiller, ChainIdFiller, FillProvider, GasFiller, JoinFill, NonceFiller},
         Identity, Provider, ProviderBuilder, RootProvider, WsConnect,
@@ -12,17 +12,30 @@ use alloy::{
     rpc::types::BlockNumberOrTag,
     sol,
 };
-use alloy_sol_types::SolEvent;
+use alloy_sol_types::{SolEvent, SolType};
 use chrono::Utc;
 use diesel::prelude::*;
 use diesel::result::Error as DieselError;
 use futures::StreamExt;
 use serde::{Deserialize, Serialize};
-use serde_json::from_str;
 use std::{collections::HashMap, env, sync::Arc, time::Duration};
 use tokio::sync::Mutex;
 use tokio::time::{sleep, timeout};
 use tracing::{debug, error, info, instrument, warn};
+
+pub enum OperatorRole {
+    Performer,
+    Attestor,
+}
+
+impl OperatorRole {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Performer => "performer",
+            Self::Attestor => "attestor",
+        }
+    }
+}
 
 sol!(
     #[sol(rpc)]
@@ -35,9 +48,14 @@ sol!(
             uint16 indexed taskDefinitionId,
             uint256[] attestersIds
         );
-
+        struct TaskData {
+            uint256 task_size;
+            address[] performers;
+        }
         // Define the function from the smart contract that returns operator details
         function getActiveOperatorsDetails() external view returns (OperatorDetails[] memory _operators);
+        // Lookup any operator (including inactive) by ID
+        function getOperatorPaymentDetail(uint256 _operatorId) external view returns (PaymentDetails memory);
     }
 
     // Define the struct that the smart contract function returns
@@ -45,6 +63,14 @@ sol!(
         address operator;
         uint256 operatorId;
         uint256 votingPower;
+        uint256 feeToClaim;
+    }
+
+    struct PaymentDetails {
+        address operator;
+        uint256 lastPaidTaskNumber;
+        uint256 feeToClaim;
+        uint8 paymentStatus;
     }
 );
 
@@ -53,7 +79,7 @@ pub struct TaskSubmittedEvent {
     pub operator: Address,
     pub task_number: u32,
     pub proof_of_task: String,
-    pub data: String,
+    pub data: Bytes,
     pub task_size: usize,
     pub performers: Vec<Address>, // Populated from the `performers` field in the JSON data
     pub task_definition_id: u16,
@@ -74,15 +100,11 @@ impl TaskSubmittedEvent {
     pub fn from_log(log: &alloy::rpc::types::Log) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
         let prim_log: alloy::primitives::Log = log.clone().into();
         let decoded = AttestationCenter::TaskSubmitted::decode_log(&prim_log, true)?;
-
-        // Decode the `data` field from bytes to a UTF-8 string.
-        let data_string = std::str::from_utf8(&decoded.data.data).unwrap_or_default().to_string();
-
         Ok(Self {
             operator: decoded.operator,
             task_number: decoded.taskNumber,
             proof_of_task: decoded.proofOfTask.clone(),
-            data: data_string,
+            data: decoded.data.data.clone(),
             // These fields will be populated in `process_log` after async calls
             task_size: 0,
             performers: Vec::new(),
@@ -144,6 +166,39 @@ impl TaskSubmittedEvent {
             if !new_attestors.is_empty() {
                 diesel::insert_into(task_attestors::table).values(&new_attestors).execute(conn)?;
             }
+
+            let performer_points: Vec<NewOperatorPointsLedger> = self
+                .performers
+                .iter()
+                .map(|addr| NewOperatorPointsLedger {
+                    operator: addr.as_slice().to_vec(),
+                    task_id,
+                    role: OperatorRole::Performer.as_str().into(),
+                    points: self.task_size as f64,
+                    created_at: new_task.timestamp,
+                })
+                .collect();
+
+            if !performer_points.is_empty() {
+                diesel::insert_into(operator_points_ledger::table).values(&performer_points).on_conflict_do_nothing().execute(conn)?;
+            }
+
+            let attestor_points: Vec<NewOperatorPointsLedger> = self
+                .attester_addresses
+                .iter()
+                .map(|addr| NewOperatorPointsLedger {
+                    operator: addr.as_slice().to_vec(),
+                    task_id,
+                    role: OperatorRole::Attestor.as_str().into(),
+                    points: 0.1 * self.task_size as f64,
+                    created_at: new_task.timestamp,
+                })
+                .collect();
+
+            if !attestor_points.is_empty() {
+                diesel::insert_into(operator_points_ledger::table).values(&attestor_points).on_conflict_do_nothing().execute(conn)?;
+            }
+
             // Persist the last processed block number
             diesel::insert_into(monitor_task_state::table)
                 .values(&NewMonitorTaskState {
@@ -295,8 +350,8 @@ impl ContractEventMonitor {
         let operators_call = contract.getActiveOperatorsDetails();
         let operators = operators_call.call().await.map_err(|e| format!("Failed to fetch operator details: {}", e))?;
 
-        // Populate the cache
-        cache.clear(); // Clear old cache before populating
+        // Merge new entries into cache (never remove old entries, as inactive
+        // operators still need to be resolved for historical attestations)
         for details in operators._operators {
             cache.insert(details.operatorId, details.operator);
         }
@@ -317,9 +372,9 @@ impl ContractEventMonitor {
             return Ok(());
         }
         // 1. Decode the JSON data from the `data` field and populate `task_size` and `performers`
-        match from_str::<TaskData>(&event.data) {
+        match AttestationCenter::TaskData::abi_decode(&event.data, true) {
             Ok(task_data) => {
-                event.task_size = task_data.task_size;
+                event.task_size = task_data.task_size.to::<usize>();
                 event.performers = task_data.performers;
                 info!("Decoded task size: {} and performers from JSON.", event.task_size);
             }
@@ -337,14 +392,32 @@ impl ContractEventMonitor {
             if let Some(address) = operator_map.get(attester_id) {
                 attester_addresses.push(*address);
             } else {
-                warn!("Could not find address for attester ID: {:?}", attester_id);
+                warn!("Could not find address for attester ID: {:?} in active operators, refreshing cache", attester_id);
                 // Force a cache refresh and try again
                 operator_map = self.get_operator_address_map(true).await?;
                 if let Some(address) = operator_map.get(attester_id) {
                     attester_addresses.push(*address);
                     info!("Successfully found attester ID {:?} after cache refresh.", attester_id);
                 } else {
-                    error!("Attester ID {:?} still not found after cache refresh.", attester_id);
+                    // Fallback: look up via getOperatorPaymentDetail (works for inactive operators)
+                    warn!("Attester ID {:?} not in active set, trying getOperatorPaymentDetail", attester_id);
+                    let contract = AttestationCenter::new(self.contract_address, self.provider.clone());
+                    match contract.getOperatorPaymentDetail(*attester_id).call().await {
+                        Ok(detail) if detail._0.operator != Address::ZERO => {
+                            let addr = detail._0.operator;
+                            info!("Resolved inactive attester ID {:?} to address {}", attester_id, addr);
+                            attester_addresses.push(addr);
+                            // Cache it so we don't need to look it up again
+                            let mut cache = self.operator_address_cache.lock().await;
+                            cache.insert(*attester_id, addr);
+                        }
+                        Ok(_) => {
+                            error!("Attester ID {:?} resolved to zero address, skipping", attester_id);
+                        }
+                        Err(e) => {
+                            error!("Failed to look up attester ID {:?} via getOperatorPaymentDetail: {:?}", attester_id, e);
+                        }
+                    }
                 }
             }
         }

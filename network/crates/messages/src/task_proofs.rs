@@ -1,12 +1,14 @@
 use crate::network_utils::RequestToNetworkWithProofs;
 use alloy::{
     hex::{self, encode},
-    primitives::{Bytes, keccak256},
+    primitives::{keccak256, Bytes, U256},
     signers::{
-        Signer, k256::{ecdsa::SigningKey, elliptic_curve::generic_array::GenericArray}, local::PrivateKeySigner
+        k256::{ecdsa::SigningKey, elliptic_curve::generic_array::GenericArray},
+        local::PrivateKeySigner,
+        Signer,
     },
 };
-use alloy_sol_types::SolValue;
+use alloy_sol_types::{sol, SolValue};
 use anyhow::{anyhow, bail, Error};
 use ethers::types::Address;
 use human_crypto::PointTrait;
@@ -17,6 +19,14 @@ use serde_json::json;
 use tracing::info;
 /// After how may task the rewards are distributed
 pub const TASK_SIZE: u32 = 1000;
+
+sol! {
+    struct TaskData {
+        uint256 task_size;
+        address[] performers;
+    }
+}
+
 #[derive(Clone)]
 pub struct Pinata {
     pub api_key: String,
@@ -45,11 +55,13 @@ pub struct IPFSTaskProof {
 }
 impl IPFSTaskProof {
     pub async fn post_to_othentic_nodes(&self, othentic_rpc_url: String, private_key: String, performers: Vec<Address>) -> Result<(), Error> {
-        let task_data = json!({
-            "task_size": TASK_SIZE,
-            "performers": performers,
-        });
-        let result = Bytes::from(task_data.to_string().as_bytes().to_vec());
+        // Convert Vec<ethers::types::Address> (H160) to Vec<alloy::alloy_primitives::Address>
+        let performers: Vec<alloy::primitives::Address> = performers.into_iter().map(|a| alloy::primitives::Address::from_slice(a.as_bytes())).collect();
+        let task_data = TaskData {
+            task_size: U256::from(TASK_SIZE),
+            performers: performers,
+        };
+        let result = Bytes::from(task_data.abi_encode());
 
         let task_definition_id = 1;
 

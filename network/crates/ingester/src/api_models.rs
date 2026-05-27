@@ -117,7 +117,49 @@ pub struct TaskResponse {
 #[derive(Debug, Serialize)]
 pub struct TotalNetworkTvl {
     pub tvl_usd: f64,
+    pub warnings: Option<Vec<String>>,
 }
+
+// --- Symbiotic External Points API V2 ---
+
+#[derive(Debug, Serialize)]
+pub struct SymbioticSyncedToResponse {
+    pub last_timestamp: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SymbioticPointRecord {
+    pub receiver_address: String,
+    pub receiver_type: String,
+    pub timestamp: String,
+    pub network_address: String,
+    pub vault_address: String,
+    pub points: i64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SymbioticPointsParams {
+    pub timestamp: Option<String>,
+    pub offset: i64,
+    pub limit: i64,
+    pub receiver_type: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SymbioticStatsParams {
+    pub timestamp: Option<String>,
+    pub receiver_type: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SymbioticStatsResponse {
+    pub total_points: i64,
+    pub stakers: i64,
+    pub networks: i64,
+    pub operators: i64,
+}
+
+// --- Symbiotic TVL (existing) ---
 
 #[derive(Deserialize)]
 pub struct SymbioticResponse {
