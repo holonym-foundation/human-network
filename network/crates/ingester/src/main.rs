@@ -260,6 +260,7 @@ async fn main() {
         .route("/operator_elected_quorums", get(handlers::get_multiplier_elected_quorums))
         .route("/peers_reachability_status/tcp", get(handlers::get_peers_reachability_status_tcp))
         .route("/peers_reachability_status/quic", get(handlers::get_peers_reachability_status_quic))
+        .route("/node_versions", get(handlers::get_node_versions))
         .route("/tasks", get(handlers::get_tasks))
         .route("/operator_points", get(handlers::get_operator_points))
         .route("/operator_points_v2", get(handlers::get_operator_points_v2))

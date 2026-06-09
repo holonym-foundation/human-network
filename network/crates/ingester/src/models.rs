@@ -48,6 +48,7 @@ pub struct PeerReachabilityTcp {
     pub multiplier_peer_id: String,
     pub success: bool,
     pub rpc_url: String,
+    pub version: Option<String>,
 }
 
 #[derive(Queryable, Selectable, Debug)]
@@ -180,6 +181,7 @@ pub struct NewPeerReachabilityTcp {
     pub multiplier_peer_id: String,
     pub success: bool,
     pub rpc_url: String,
+    pub version: Option<String>,
 }
 
 #[derive(Insertable, AsChangeset, Debug)]

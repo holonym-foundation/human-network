@@ -57,6 +57,7 @@ impl KafkaTopic {
 pub struct PeerReachabilityTCPStatus {
     pub success: bool,
     pub rpc_url: String,
+    pub version: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]

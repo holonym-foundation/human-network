@@ -158,6 +158,8 @@ impl ElectionEngineState {
 
 pub fn build_http_client(rpc_url: &str) -> HttpClient { HttpClientBuilder::default().build(rpc_url).expect("Failed to build client") }
 
+fn normalize_version(raw: &str) -> String { raw.rsplit(": ").next().unwrap_or(raw).trim().to_string() }
+
 /// Ping peers to check their reachability
 fn ping_peers(new_set: &mut [ProverInfo], kafka: Option<Arc<KafkaProducer>>) -> Result<Vec<ProverInfo>, String> {
     trace!("Entering ping_peers with {} peers", new_set.len());
@@ -194,9 +196,21 @@ fn ping_peers(new_set: &mut [ProverInfo], kafka: Option<Arc<KafkaProducer>>) -> 
                     info!("Peer at {} is reachable: {:?}", peer.rpcaddr, response);
                     reachable_peers.push(peer.clone());
                     if let Some(kafka) = kafka.clone() {
+                        let version = match client.get_current_version().await {
+                            Ok(NodeResponse::Version { version }) => Some(normalize_version(&version)),
+                            Ok(other) => {
+                                warn!("Unexpected get_current_version response from {}: {:?}", peer.rpcaddr, other);
+                                None
+                            }
+                            Err(e) => {
+                                warn!("Failed to fetch version from reachable peer {}: {:?}", peer.rpcaddr, e);
+                                None
+                            }
+                        };
                         let status = PeerReachabilityTCPStatus {
                             success: true,
                             rpc_url: peer.rpcaddr.clone(),
+                            version,
                         };
                         kafka.send(messages::kafka::KafkaTopic::PeerReachabilityTCP, peer.peer_id.to_string(), status).await;
                     }
@@ -207,6 +221,7 @@ fn ping_peers(new_set: &mut [ProverInfo], kafka: Option<Arc<KafkaProducer>>) -> 
                         let status = PeerReachabilityTCPStatus {
                             success: false,
                             rpc_url: peer.rpcaddr.clone(),
+                            version: None,
                         };
                         kafka.send(messages::kafka::KafkaTopic::PeerReachabilityTCP, peer.peer_id.to_string(), status).await;
                     }

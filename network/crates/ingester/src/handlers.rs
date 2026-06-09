@@ -6,13 +6,13 @@ use axum::extract::{Query, State};
 use axum::http::StatusCode;
 use axum::Json;
 use chrono::{DateTime, Duration, TimeZone, Utc};
-use diesel::dsl::{count_distinct, sql};
+use diesel::dsl::{count_distinct, count_star, sql};
 use diesel::prelude::*;
 use diesel::sql_types::{Double, Timestamptz};
 use tracing::{error, info, instrument, warn};
 
 use crate::api_models::{
-    ApiResponse, CmcResponse, CurrentQuorumResponse, EigenResponse, KeyCount, KeysGeneratedChartData, MultiplierComputedRequests, MultiplierQuorumElections, OperatorPointsResponse, PaginatedResponse,
+    ApiResponse, CmcResponse, CurrentQuorumResponse, EigenResponse, KeyCount, KeysGeneratedChartData, MultiplierComputedRequests, MultiplierQuorumElections, NodeVersionCount, OperatorPointsResponse, PaginatedResponse,
 PeerReachabilityStatus, QuorumElectionResponse, QuorumMemberResponse, RequestResponse, SymbioticPointRecord, SymbioticPointsParams, SymbioticResponse, SymbioticStatsParams, SymbioticStatsResponse, SymbioticSyncedToResponse, TaskResponse,
     TotalKeysGenerated, TotalNetworkTvl, UserCreditsResponse,
 };
@@ -168,9 +168,21 @@ pub async fn get_current_quorum(State(AppState { pool, .. }): State<AppState>) -
 
     info!(quorum_id = current_quorum_info.id, member_count = multipliers.len(), "Successfully retrieved current quorum");
 
+    // Left-join each member's last-known running version from the reachability probe,
+    // keyed by the shared multiplier_peer_id. Members never probed map to None.
+    let member_peer_ids: Vec<String> = multipliers.iter().map(|m| m.multiplier_peer_id.clone()).collect();
+    let version_map: HashMap<String, Option<String>> = peer_reachability_tcp::table
+        .filter(peer_reachability_tcp::multiplier_peer_id.eq_any(&member_peer_ids))
+        .select((peer_reachability_tcp::multiplier_peer_id, peer_reachability_tcp::version))
+        .load::<(String, Option<String>)>(&mut conn)
+        .map_err(|e| ApiError::DatabaseQuery(format!("Failed to query node versions for quorum {}: {}", current_quorum_info.id, e)))?
+        .into_iter()
+        .collect();
+
     let quorum_members_response: Vec<QuorumMemberResponse> = multipliers
         .into_iter()
         .map(|p| QuorumMemberResponse {
+            version: version_map.get(&p.multiplier_peer_id).cloned().flatten(),
             multiplier_evm_address: p.multiplier_evm_address,
             multiplier_peer_id: p.multiplier_peer_id,
             multi_address: p.multi_address,
@@ -488,11 +500,37 @@ pub async fn get_peers_reachability_status_tcp(State(AppState { pool, .. }): Sta
             last_checked_timestamp: p.kafka_timestamp,
             success: p.success,
             details: p.rpc_url,
+            version: p.version,
         })
         .collect();
 
     let successful_count = response.iter().filter(|p| p.success).count();
     info!(total_peers = response.len(), successful_peers = successful_count, "Successfully retrieved TCP reachability status");
+
+    Ok(success_response(response))
+}
+
+/// GET /api/v1/node_versions
+/// Returns the count of nodes running each version (from the latest TCP reachability
+/// probe), for a rollout/version-distribution view. Only nodes that reported a version
+/// are counted.
+#[instrument(name = "get_node_versions", skip(pool))]
+pub async fn get_node_versions(State(AppState { pool, .. }): State<AppState>) -> Result<Json<ApiResponse<Vec<NodeVersionCount>>>, (StatusCode, String)> {
+    let mut conn = pool.get().map_err(|e| ApiError::DatabaseConnection(format!("Failed to get connection: {}", e)))?;
+
+    let rows: Vec<(Option<String>, i64)> = peer_reachability_tcp::table
+        .filter(peer_reachability_tcp::version.is_not_null())
+        .group_by(peer_reachability_tcp::version)
+        .select((peer_reachability_tcp::version, count_star()))
+        .load(&mut conn)
+        .map_err(|e| ApiError::DatabaseQuery(format!("Failed to query node versions: {}", e)))?;
+
+    let response: Vec<NodeVersionCount> = rows
+        .into_iter()
+        .filter_map(|(version, count)| version.map(|version| NodeVersionCount { version, count }))
+        .collect();
+
+    info!(distinct_versions = response.len(), "Successfully retrieved node version distribution");
 
     Ok(success_response(response))
 }
@@ -515,6 +553,7 @@ pub async fn get_peers_reachability_status_quic(State(AppState { pool, .. }): St
             last_checked_timestamp: p.kafka_timestamp,
             success: p.success,
             details: p.duration_micros.map(|v| v.to_string()).unwrap_or_else(|| "None".to_string()),
+            version: None, // QUIC is a transport ping and cannot fetch node version
         })
         .collect();
 

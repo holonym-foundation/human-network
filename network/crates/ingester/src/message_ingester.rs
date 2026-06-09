@@ -159,18 +159,28 @@ impl KafkaMessageIngestor for PeerReachabilityTCPStatus {
             multiplier_peer_id: key.to_string(), // Assuming key is peer_id
             success: self.success,
             rpc_url: self.rpc_url.clone(),
+            version: self.version.clone(),
         };
 
         info!(
             "Attempting to upsert TCP reachability status: {:?}",
             new_tcp_status
         );
-        // Use on_conflict for upsert, assuming UNIQUE(peer_id) constraint exists
+        // Use on_conflict for upsert, assuming UNIQUE(peer_id) constraint exists.
+        // Version is preserved via COALESCE so a transiently-unreachable node (which
+        // reports version = NULL) keeps its last-known version instead of being wiped.
         diesel::insert_into(peer_reachability_tcp::table)
             .values(&new_tcp_status)
             .on_conflict(peer_reachability_tcp::multiplier_peer_id)
             .do_update()
-            .set(&new_tcp_status)
+            .set((
+                peer_reachability_tcp::kafka_timestamp.eq(new_tcp_status.kafka_timestamp),
+                peer_reachability_tcp::success.eq(new_tcp_status.success),
+                peer_reachability_tcp::rpc_url.eq(new_tcp_status.rpc_url.clone()),
+                peer_reachability_tcp::version.eq(diesel::dsl::sql::<diesel::sql_types::Nullable<diesel::sql_types::Text>>(
+                    "COALESCE(EXCLUDED.version, peer_reachability_tcp.version)",
+                )),
+            ))
             .execute(conn)?;
         info!("Successfully upserted TCP reachability for peer: {}", key);
         Ok(())

@@ -26,6 +26,7 @@ pub struct QuorumMemberResponse {
     pub rsa_pub_key: String,
     pub voting_power: String,
     pub node_idx: i32,
+    pub version: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -94,6 +95,13 @@ pub struct PeerReachabilityStatus {
     pub last_checked_timestamp: Option<DateTime<Utc>>,
     pub success: bool,
     pub details: String, // e.g., rpc_url for TCP, duration_micros for QUIC
+    pub version: Option<String>, // running node version (TCP only); None for QUIC
+}
+
+#[derive(Debug, Serialize)]
+pub struct NodeVersionCount {
+    pub version: String,
+    pub count: i64,
 }
 
 #[derive(Debug, Serialize)]

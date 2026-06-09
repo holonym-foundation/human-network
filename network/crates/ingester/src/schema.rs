@@ -70,6 +70,7 @@ diesel::table! {
         multiplier_peer_id -> Text,
         success -> Bool,
         rpc_url -> Text,
+        version -> Nullable<Text>,
     }
 }
 
