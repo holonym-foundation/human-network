@@ -1,5 +1,5 @@
 x-operator: &operator
-  image: humannetwork/operator:test
+  image: mishtinetwork/operator:test
   env_file: .env
 
 x-othentic-cli: &othentic-cli
@@ -9,7 +9,7 @@ x-othentic-cli: &othentic-cli
 
 # Define a custom network with a subnet
 networks:
-  human_network:
+  mishti_network:
     driver: bridge
     ipam:
       config:
@@ -24,7 +24,7 @@ services:
     ports:
       - 6379:6379
     networks:
-      human_network:
+      mishti_network:
         ipv4_address: 172.28.0.5 # Static IP for Redis
     logging:
       driver: "json-file"
@@ -55,7 +55,7 @@ services:
     volumes:
       - ./node_state:/state
     networks:
-      human_network:
+      mishti_network:
         ipv4_address: 172.28.0.10 # Static IP for relay
     logging:
       driver: "json-file"
