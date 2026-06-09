@@ -1,5 +1,5 @@
 x-operator: &operator
-  image: humannetwork/operator:test
+  image: mishtinetwork/operator:test
   env_file: .env
 
 x-othentic-cli: &othentic-cli

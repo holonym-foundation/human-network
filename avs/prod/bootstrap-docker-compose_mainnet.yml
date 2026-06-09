@@ -1,5 +1,5 @@
 x-operator: &operator
-  image: humannetwork/operator:mainnetalphaV3.2.0
+  image: mishtinetwork/operator:mainnetalphaV3.3.0
   env_file: .env
 
 x-othentic-cli: &othentic-cli
@@ -9,7 +9,7 @@ x-othentic-cli: &othentic-cli
 
 # Define a custom network with a subnet
 networks:
-  human_network:
+  mishti_network:
     driver: bridge
     ipam:
       config:
@@ -24,7 +24,7 @@ services:
     ports:
       - 6379:6379
     networks:
-      human_network:
+      mishti_network:
         ipv4_address: 172.28.0.5 # Static IP for Redis
     logging:
       driver: "json-file"
@@ -55,7 +55,7 @@ services:
     volumes:
       - ./node_state:/state
     networks:
-      human_network:
+      mishti_network:
         ipv4_address: 172.28.0.10 # Static IP for relay
     logging:
       driver: "json-file"
@@ -88,7 +88,7 @@ services:
         "data/peerstore/aggregator",
         "--announced-addresses",
         # this is the actual ip and the peer id of the aggregator
-        "${AGGREGATOR_MULTIADDR:-/ip4/127.0.0.1/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB}",
+        "/ip4/52.22.195.106/tcp/9876/p2p/12D3KooWBNFG1QjuF3UKAKvqhdXcxh9iBmj88cM5eU2EK5Pa91KB",
         "--delay",
         # waits for 2 seconds before submitting the task
         "2000"

@@ -94,7 +94,7 @@ If the `local_test_net` feature is enabled, you can trigger resharing by sending
 
   ```bash
   apt-get update && apt-get install procps -y
-  kill -HUP $(ps aux | grep '6379/1' | grep -v grep | awk '{print $2}')
+  kill -HUP $(ps aux | grep '6379/0' | grep -v grep | awk '{print $2}')
   ```
 
 ### Additional Commands

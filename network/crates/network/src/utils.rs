@@ -26,6 +26,7 @@ use std::sync::Arc;
 use std::{env, panic};
 use tokio::sync::oneshot::Sender;
 use tracing::error;
+use rand::Rng;
 /// A struct representing a keypair name and its associated multiaddr.
 #[derive(Clone, Serialize, Deserialize)]
 struct KeypairName {

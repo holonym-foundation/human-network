@@ -45,3 +45,4 @@ delay-queue = { workspace = true }
 lazy_static = { workspace = true }
 pubsub-rs = { workspace = true }
 once_cell = "1.19"
+futures = { workspace = true }

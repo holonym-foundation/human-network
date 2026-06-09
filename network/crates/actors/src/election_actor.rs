@@ -17,7 +17,7 @@ use ractor::{
     Actor, ActorCell, ActorProcessingErr, ActorRef, SupervisionEvent,
 };
 use thiserror::*;
-use tokio::{runtime::Runtime, sync::Mutex};
+use tokio::sync::Mutex;
 use tracing::{debug, error, info, trace, warn};
 // Project-specific imports
 use messages::{
@@ -158,10 +158,19 @@ impl ElectionEngineState {
 
 pub fn build_http_client(rpc_url: &str) -> HttpClient { HttpClientBuilder::default().build(rpc_url).expect("Failed to build client") }
 
+const PING_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Build an HTTP client with a short request timeout, used only for the reachability ping.
+/// Kept separate from `build_http_client` so heavier RPCs (e.g. `fetch_election_state`) keep
+/// the default 60s timeout.
+fn build_ping_client(rpc_url: &str) -> HttpClient {
+    HttpClientBuilder::default().request_timeout(PING_REQUEST_TIMEOUT).build(rpc_url).expect("Failed to build client")
+}
+
 fn normalize_version(raw: &str) -> String { raw.rsplit(": ").next().unwrap_or(raw).trim().to_string() }
 
-/// Ping peers to check their reachability
-fn ping_peers(new_set: &mut [ProverInfo], kafka: Option<Arc<KafkaProducer>>) -> Result<Vec<ProverInfo>, String> {
+/// Ping peers concurrently to check their reachability.
+async fn ping_peers(new_set: &[ProverInfo], kafka: Option<Arc<KafkaProducer>>) -> Result<Vec<ProverInfo>, String> {
     trace!("Entering ping_peers with {} peers", new_set.len());
 
     if new_set.is_empty() {
@@ -171,31 +180,16 @@ fn ping_peers(new_set: &mut [ProverInfo], kafka: Option<Arc<KafkaProducer>>) -> 
 
     debug!("Processing peers: {:?}", new_set.iter().map(|p| &p.rpcaddr).collect::<Vec<_>>());
 
-    let runtime = match Runtime::new() {
-        Ok(runtime) => {
-            debug!("Successfully created Tokio runtime");
-            runtime
-        }
-        Err(e) => {
-            error!("Failed to create Tokio runtime: {:?}", e);
-            return Err(format!("Failed to create runtime: {:?}", e));
-        }
-    };
-
-    let mut reachable_peers = Vec::new();
-
-    runtime.block_on(async {
-        for peer in new_set.iter_mut() {
+    let probes = new_set.iter().cloned().map(|peer| {
+        let kafka = kafka.clone();
+        async move {
             trace!("Processing peer at {}", peer.rpcaddr);
+            let client = build_ping_client(&peer.rpcaddr);
 
-            let client = build_http_client(&peer.rpcaddr);
-
-            let response_result = client.ping().await;
-            match response_result {
+            match client.ping().await {
                 Ok(response) => {
                     info!("Peer at {} is reachable: {:?}", peer.rpcaddr, response);
-                    reachable_peers.push(peer.clone());
-                    if let Some(kafka) = kafka.clone() {
+                    if let Some(kafka) = kafka {
                         let version = match client.get_current_version().await {
                             Ok(NodeResponse::Version { version }) => Some(normalize_version(&version)),
                             Ok(other) => {
@@ -207,29 +201,24 @@ fn ping_peers(new_set: &mut [ProverInfo], kafka: Option<Arc<KafkaProducer>>) -> 
                                 None
                             }
                         };
-                        let status = PeerReachabilityTCPStatus {
-                            success: true,
-                            rpc_url: peer.rpcaddr.clone(),
-                            version,
-                        };
+                        let status = PeerReachabilityTCPStatus { success: true, rpc_url: peer.rpcaddr.clone(), version };
                         kafka.send(messages::kafka::KafkaTopic::PeerReachabilityTCP, peer.peer_id.to_string(), status).await;
                     }
+                    Some(peer)
                 }
                 Err(e) => {
                     warn!("Unreachable peer at {}: {:?}", peer.rpcaddr, e);
-                    if let Some(kafka) = kafka.clone() {
-                        let status = PeerReachabilityTCPStatus {
-                            success: false,
-                            rpc_url: peer.rpcaddr.clone(),
-                            version: None,
-                        };
+                    if let Some(kafka) = kafka {
+                        let status = PeerReachabilityTCPStatus { success: false, rpc_url: peer.rpcaddr.clone(), version: None };
                         kafka.send(messages::kafka::KafkaTopic::PeerReachabilityTCP, peer.peer_id.to_string(), status).await;
                     }
+                    None
                 }
             }
-            debug!("Current reachable peers count: {}", reachable_peers.len());
         }
     });
+
+    let reachable_peers: Vec<ProverInfo> = futures::future::join_all(probes).await.into_iter().flatten().collect();
 
     trace!("Finished processing peers. Found {} reachable peers", reachable_peers.len());
 
@@ -337,7 +326,7 @@ impl Actor for ElectionEngineActor {
                 let min_nodes = get_min_nodes();
                 // Ping peers to check reachability
                 info!("Pinging sampled peers");
-                match ping_peers(&mut participating_provers.clone(), state.kafka.clone()) {
+                match ping_peers(&participating_provers, state.kafka.clone()).await {
                     Ok(reachable_peers) => {
                         info!("Found {} reachable peers", reachable_peers.len());
                         if reachable_peers.len() < min_nodes {
@@ -1006,7 +995,7 @@ async fn handle_trigger_election(state: &mut ElectionEngineState) -> Result<(), 
         state.dkg_round1_status.clear();
         state.dkg_round2_status.clear();
         loop {
-            match ping_peers(&mut state.elected_provers, state.kafka.clone()) {
+            match ping_peers(&state.elected_provers, state.kafka.clone()).await {
                 // Attempt to ping peers and get reachable peers
                 Ok(reachable_peers) => {
                     let min_nodes = get_min_nodes();
@@ -1299,6 +1288,38 @@ mod tests {
         for prover in provers.iter() {
             println!("provers :{:#?}  : {:?}", prover.peer_id, prover.voting_power);
         }
+    }
+
+    // Regression guard: the pre-election ping must fail fast on a reachable-but-silent peer
+    // (bounded by PING_REQUEST_TIMEOUT = 3s), not hang on jsonrpsee's 60s default.
+    #[tokio::test]
+    async fn ping_client_times_out_fast_on_silent_peer() {
+        use crate::election_actor::build_ping_client;
+        use rpc_trait::rpc::HumanRpcClient;
+        use std::time::{Duration, Instant};
+
+        // Accept the TCP connection but never send an HTTP response, so the request hangs
+        // until the client's request_timeout fires.
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let addr = listener.local_addr().unwrap();
+        std::thread::spawn(move || {
+            let mut held = Vec::new();
+            for stream in listener.incoming() {
+                match stream {
+                    Ok(s) => held.push(s), // hold open, never reply
+                    Err(_) => break,
+                }
+            }
+        });
+
+        let client = build_ping_client(&format!("http://{}", addr));
+        let start = Instant::now();
+        let result = client.ping().await;
+        let elapsed = start.elapsed();
+
+        assert!(result.is_err(), "silent peer should not return a successful ping");
+        // Must fail on the ~3s ping timeout, well below the 60s jsonrpsee default.
+        assert!(elapsed < Duration::from_secs(15), "ping should time out fast, took {:?}", elapsed);
     }
 
     trait ElectionStrategy: Send + Sync {

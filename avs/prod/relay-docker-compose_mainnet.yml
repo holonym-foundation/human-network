@@ -1,5 +1,5 @@
 x-operator: &operator
-  image: humannetwork/operator:mainnetalphaV3.2.0
+  image: mishtinetwork/operator:mainnetalphaV3.3.0
   env_file: .env
 
 x-othentic-cli: &othentic-cli
@@ -8,13 +8,13 @@ x-othentic-cli: &othentic-cli
   entrypoint: othentic-cli
 
 x-verifier: &verifier
-  image: humannetwork/operator:mainnetalphaV3.2.0
+  image: mishtinetwork/operator:mainnetalphaV3.3.0
   env_file: .env
   command: [ "./verifier" ]
 
 # Define a custom network with a subnet
 networks:
-  human_network:
+  mishti_network:
     driver: bridge
     ipam:
       config:
@@ -33,7 +33,7 @@ services:
     environment:
       - REDIS_PASSWORD=${REDIS_PASSWORD} # Define password in environment
     networks:
-      human_network:
+      mishti_network:
         ipv4_address: 172.28.0.5 # Static IP for Redis
     logging:
       driver: "json-file"
@@ -67,7 +67,7 @@ services:
     volumes:
       - ./node_state:/state
     networks:
-      human_network:
+      mishti_network:
         ipv4_address: 172.28.0.10 # Static IP for relay
     depends_on:
       - redis # Ensure Redis starts first
@@ -88,7 +88,7 @@ services:
     ports:
       - "${AVS_WEBAPI_PORT}:${AVS_WEBAPI_PORT}"
     networks:
-      human_network:
+      mishti_network:
         ipv4_address: 172.28.0.20 # Static IP for avs_web_api
     depends_on:
       - redis
@@ -105,7 +105,7 @@ services:
       - "node"
       - "attester"
       # multiaddress of the aggregator node
-      - "${AGGREGATOR_MULTIADDR:-/ip4/127.0.0.1/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}}"
+      - "/ip4/52.22.195.106/tcp/9876/p2p/${OTHENTIC_BOOTSTRAP_ID}"
       - "--json-rpc"
       - "--json-rpc.custom-message-enabled"
       - "--avs-webapi"
@@ -136,7 +136,7 @@ services:
       - ./data/peerstore/attestor:/app/data/peerstore/attestor
       - ./data/logs/attestor:/app/logs/peerstore/attestor
     networks:
-      human_network:
+      mishti_network:
         ipv4_address: 172.28.0.30 # Static IP for attestor
     depends_on:
       - avswebapi

@@ -137,7 +137,7 @@ When Eigenlayer includes operator rewards, this accounting is used to determined
 5. Run your command.
 
         cd network
-        RUST_LOG=INFO ./target/debug/cli --input "usr:123" --private-key <private-key> --method OPRFSecp256k1 --rpc-url "http://0.0.0.0:8081"
+        RUST_LOG=INFO ./target/release/cli --input "usr:123" --private-key <private-key> --method OPRFSecp256k1 --rpc-url "http://0.0.0.0:8081"
 
 -------------------------------------------------
 # Testnet Architecture
@@ -156,7 +156,7 @@ Most nodes will be prover nodes. To run any type of node, simply
 1. Ask the team for the relevant envirnoment variables and save as .env.
 2. Set `RSA_SEED` and `SECP256K1_SEED`. Each must be a 32-byte hex string without a 0x prefix.
 3. Give the team your docker hub email address or username so we can give you access to the docker image
-4. Setup your operator via `docker run -it humannetwork/operator othentic-cli operator register`. Use the AVS governance contract address `0x8F02dAC5E2FA7ee3f8B40A62e374093A120f90Ae`
+4. Setup your operator via `docker run -it mishtinetwork/operator othentic-cli operator register`. Use the AVS governance contract address `0x8F02dAC5E2FA7ee3f8B40A62e374093A120f90Ae`
 
 ### Running a Prover node
 
@@ -164,7 +164,7 @@ Most nodes will be prover nodes. To run any type of node, simply
 
 First register with the Human PeerRegistry smart contract. \<rpc-url> must be a URL for a Holesky RPC node, used to send the registration transaction to the blockchain. \<private-key> should be for the account you want to associate with your node metadata. \<multiaddr> and \<rpcaddr> should be the multiaddr and RPC address of your Human node.
 
-    docker run --env-file .env humannetwork/operator ./registry_iface register --rpc-url <rpc-url> --private-key <private-key> --multiaddr <multiaddr> --rpcaddr <rpcaddr>
+    docker run --env-file .env mishtinetwork/operator ./registry_iface register --rpc-url <rpc-url> --private-key <private-key> --multiaddr <multiaddr> --rpcaddr <rpcaddr>
 
 If the call is successful, you will see a transaction receipt.
 
@@ -172,16 +172,16 @@ When populating your environment variables, make sure your multiaddr and rpcaddr
 
 #### Run
 
-    docker run --env-file .env --restart="always" humannetwork/operator ./human_node --bootstrap-peer-id <bootstrap-peer-id> --bootstrap-multiaddr <bootstrap-multiaddr> --relay-peer-id <relay-peer-id> --relay-multiaddr <relay-multiaddr> --port <port> --redis redis://127.0.0.1:6379/0
+    docker run --env-file .env --restart="always" mishtinetwork/operator ./human_node --bootstrap-peer-id <bootstrap-peer-id> --bootstrap-multiaddr <bootstrap-multiaddr> --relay-peer-id <relay-peer-id> --relay-multiaddr <relay-multiaddr> --port <port> --redis redis://127.0.0.1:6379/0
 
 ### Running an AVSWebAPI/Verifier/Attestor node
 You will need two docker images running locally: 
-- `docker run --env-file .env --restart="always" humannetwork/operator sh -c 'redis-server --daemonize yes; ./verifier'`
-`docker run --env-file .env --restart="always" humannetwork/operator othentic-cli node attester /ip4/<bootstrap node IP address>/tcp/9876/p2p/<Othentic bootstrap ID> --avs-webapi http://0.0.0.0`
+- `docker run --env-file .env --restart="always" mishtinetwork/operator sh -c 'redis-server --daemonize yes; ./verifier'`
+`docker run --env-file .env --restart="always" mishtinetwork/operator othentic-cli node attester /ip4/<bootstrap node IP address>/tcp/9876/p2p/<Othentic bootstrap ID> --avs-webapi http://0.0.0.0`
 
 For testnet, the bootstrap node IP address is `52.90.236.173` and bootstrap ID is `12D3KooWCvMcbwgVsf6TgCGLN5o64WBWrJnuZLJYizy4hHkRAma5`.
 ### Running the Aggregator node
-`docker run --env-file .env --restart="always" -p 8545:8545 -p 9876:9876 humannetwork/operator othentic-cli node aggregator --json-rpc`
+`docker run --env-file .env --restart="always" -p 8545:8545 -p 9876:9876 mishtinetwork/operator othentic-cli node aggregator --json-rpc`
 ### Running the Relay node
 Follow the steps in "Running a Prover node", but set the `NODE_TYPE` environment variable to `Relay`.
 

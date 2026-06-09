@@ -116,7 +116,7 @@ RUN apt install redis-server -y
 # COPY --from=builder /project/network/target/debug/registry_iface ./registry_iface
 # COPY --from=builder /project/network/target/debug/verifier ./verifier
 # For production
-COPY --from=builder /project/network/target/release/human_node ./network_node
+COPY --from=builder /project/network/target/release/human_node ./human_node
 COPY --from=builder /project/network/target/release/registry_iface ./registry_iface
 COPY --from=builder /project/network/target/release/signer ./signer
 COPY --from=builder /project/network/target/release/verifier ./verifier
