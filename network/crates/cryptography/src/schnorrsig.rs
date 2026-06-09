@@ -91,7 +91,7 @@ mod tests {
     #[test]
     fn generate_some_test_values() {
         let secret = <BabyJubJub as Curve<32>>::Scalar::rand_vartime();
-        let signed: SchnorrSig<32, BabyJubJub> = secret.sign("0x248002ce5220b12d87bdbe148e04ee4bf29682f4".parse::<Address>().expect("invalid conditions contract address").as_bytes());
+        let signed: SchnorrSig<32, BabyJubJub> = secret.sign("0x3a0d4A524Aa53A29959Aaef1Cff899F35Cc7F766".parse::<Address>().expect("invalid conditions contract address").as_bytes());
         let result = serde_json::to_string_pretty(&EphemeralPrivateKeyWithSig {
             private_key: secret,
             signature: signed,

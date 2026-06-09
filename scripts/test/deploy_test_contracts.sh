@@ -12,11 +12,11 @@ cd $DIR/../../mishti-smart-contracts
 forge create --rpc-url http://localhost:8540 --private-key 0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80 ./src/PeerRegistry.sol:PeerRegistry --broadcast
 
 # Deploy AuthorityWithDailyRateLimitV2 to a temp address, then plant it at the mainnet
-# address (0x248002ce5220b12d87bdbe148e04ee4bf29682f4) using Anvil cheatcodes so the
+# address (0x3a0d4A524Aa53A29959Aaef1Cff899F35Cc7F766) using Anvil cheatcodes so the
 # SDK's hardcoded CONDITIONS_CONTRACT works without modification.
 ANVIL_DEPLOYER=0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80
 ANVIL_OWNER=0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266
-CONDITIONS_CONTRACT=0x248002ce5220b12d87bdbe148e04ee4bf29682f4
+CONDITIONS_CONTRACT=0x3a0d4A524Aa53A29959Aaef1Cff899F35Cc7F766
 
 DEPLOY_OUTPUT=$(forge create \
     --rpc-url http://localhost:8540 \

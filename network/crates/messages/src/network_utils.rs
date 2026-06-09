@@ -34,7 +34,7 @@ use human_crypto::{
 // const HUMAN_TOKEN_TESTNET: &str = "0x757Ab92207D730DF72A4B8Fb2c540F206ac647A9";
 pub const HUMAN_CREDITS: &str = "0x18494fecf61d2282c45b8bf481403c1fcb5d94e6";
 lazy_static! {
-    pub static ref CONDITIONS_CONTRACT: H160 = "0x248002ce5220b12d87bdbe148e04ee4bf29682f4".parse().unwrap();
+    pub static ref CONDITIONS_CONTRACT: H160 = "0x3a0d4A524Aa53A29959Aaef1Cff899F35Cc7F766".parse().unwrap();
 }
 // Generate the ABI of the Human Credits RobustNet contract (ETH Mainnet)
 abigen!(
@@ -736,7 +736,7 @@ mod test {
         let wallet = LocalWallet::new(&mut ThreadRng::default());
         let msg = &[69u8; 24];
         // This contract allows a whitelisted address to decrypt up to 10000 messages
-        let conditions_contract = "0x248002ce5220b12d87bdbe148e04ee4bf29682f4".parse().unwrap();
+        let conditions_contract = "0x3a0d4A524Aa53A29959Aaef1Cff899F35Cc7F766".parse().unwrap();
         let ciphertext_with_signed_conditions = encrypt_with_conditions(msg, &<BabyJubJub as Curve<32>>::base_point_or_generator().mul_bigint(&[69]).into_affine(), conditions_contract).unwrap();
         let _right_point = ciphertext_with_signed_conditions.ciphertext.ephemeral_dh_pubkey.clone();
         let ciphertext_with_right_pubkey = ciphertext_with_signed_conditions;
@@ -799,7 +799,7 @@ mod test {
         // env::set_var("HUMAN_MOCK_CREDITS", "2");
         let msg = &[69u8; 24];
         // This contract allows a whitelisted address to decrypt up to 10000 messages
-        let conditions_contract = "0x248002ce5220b12d87bdbe148e04ee4bf29682f4".parse().unwrap();
+        let conditions_contract = "0x3a0d4A524Aa53A29959Aaef1Cff899F35Cc7F766".parse().unwrap();
         let ciphertext_with_signed_conditions = encrypt_with_conditions(msg, &<BabyJubJub as Curve<32>>::base_point_or_generator().mul_bigint(&[69]).into_affine(), conditions_contract).unwrap();
         let should_succ = RequestToNetwork {
             method: Method::DecryptBabyJubJub,

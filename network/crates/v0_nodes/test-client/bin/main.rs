@@ -82,7 +82,7 @@ async fn decrypt_test_client(input: &String, wallet: LocalWallet, relay_url: &st
     // a message to encrypt to the network
     let msg = &[123u8; 24];
     // This contract allows a whitelisted address to decrypt up to 10000 messages
-    let conditions_contract = "0x248002ce5220b12d87bdbe148e04ee4bf29682f4".parse().unwrap();
+    let conditions_contract = "0x3a0d4A524Aa53A29959Aaef1Cff899F35Cc7F766".parse().unwrap();
     // If you want to get the public key of the network, you can uncomment this:
     // use the private key of 1 to get the network's public key as a response
     // let ciphertext_with_signed_conditions = testfn(msg, &BabyJubJub::base_point_or_generator(), conditions_contract, Fr::from_biguint_vartime(BigUint::from_str("1").unwrap()).unwrap()).unwrap();

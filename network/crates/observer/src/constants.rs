@@ -9,7 +9,7 @@ lazy_static! {
     pub static ref SIGN_PROTOCOL_API_KEY: String = env::var("SIGN_PROTOCOL_API_KEY").expect("SIGN_PROTOCOL_API_KEY not set");
     pub static ref ACCESS_CONDITION_CONTRACTS: Vec<Address> = {
         let contracts_str = env::var("ACCESS_CONDITION_CONTRACTS")
-            .unwrap_or_else(|_| "0x69e3373c6165045c3c59a11645415eff8fd15cac,0x248002ce5220b12d87bdbe148e04ee4bf29682f4,0xE6BaB4228Ad23D59A1F1D69f1Cb14C2Ba29D91e9".to_string());
+            .unwrap_or_else(|_| "0x69e3373c6165045c3c59a11645415eff8fd15cac,0x3a0d4A524Aa53A29959Aaef1Cff899F35Cc7F766,0xE6BaB4228Ad23D59A1F1D69f1Cb14C2Ba29D91e9".to_string());
         contracts_str
             .split(',')
             .map(|addr| Address::from_str(addr.trim()).expect(&format!("Invalid address: {}", addr)))

@@ -155,7 +155,7 @@ impl RequestToNetwork {
 // generate oprf specific structs and consts
 
 lazy_static! {
-    pub static ref CONDITIONS_CONTRACT: H160 = "0x248002ce5220b12d87bdbe148e04ee4bf29682f4".parse().unwrap();
+    pub static ref CONDITIONS_CONTRACT: H160 = "0x3a0d4A524Aa53A29959Aaef1Cff899F35Cc7F766".parse().unwrap();
     pub static ref HTTP_CLIENT: Client = reqwest::ClientBuilder::new()
         .build()
         .expect("Failed to build HTTP client");

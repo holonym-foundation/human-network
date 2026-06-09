@@ -7,7 +7,7 @@ use wasm_bindgen_test::*;
 wasm_bindgen_test_configure!(run_in_browser);
 #[wasm_bindgen_test]
 fn test_signing_w_new_rand_privkey() {
-    // generate_ephemeral_key_and_sign_conditions_with_it("0x248002ce5220b12d87bdbe148e04ee4bf29682f4".to_string());
+    // generate_ephemeral_key_and_sign_conditions_with_it("0x3a0d4A524Aa53A29959Aaef1Cff899F35Cc7F766".to_string());
 }
 // #[wasm_bindgen_test]
 // fn test_request() {
