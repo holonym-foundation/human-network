@@ -221,6 +221,9 @@ pub struct ProverInfoWithoutStake {
     pub peer_id: PeerId,
     pub address: Multiaddr,
     pub rpcaddr: String,
+    // Serialize as `mishti_pub_key` for wire compatibility with old (V3.2.0) nodes, which
+    // emit that field name; accept both names so mixed-version networks interoperate.
+    #[serde(rename = "mishti_pub_key", alias = "human_pub_key")]
     pub human_pub_key: HumanPublicKey,
     pub rsa_pub_key: RSAPublicKey,
     pub idx: usize,
@@ -232,6 +235,9 @@ pub struct ProverInfo {
     pub peer_id: PeerId,
     pub address: Multiaddr,
     pub rpcaddr: String,
+    // Serialize as `mishti_pub_key` for wire compatibility with old (V3.2.0) nodes, which
+    // emit that field name; accept both names so mixed-version networks interoperate.
+    #[serde(rename = "mishti_pub_key", alias = "human_pub_key")]
     pub human_pub_key: HumanPublicKey,
     pub rsa_pub_key: RSAPublicKey,
     pub voting_power: U256,
@@ -361,4 +367,47 @@ pub enum GossipEngineMessage {
     GetConnectedPeers(Sender<NodeResponse>),
     GetPeerScores(Sender<NodeResponse>),
     GetMeshPeers(Sender<NodeResponse>),
+}
+
+#[cfg(test)]
+mod prover_info_wire_compat_tests {
+    use super::*;
+    use crate::utils::HumanPublicKey;
+    use libp2p::identity::Keypair;
+
+    fn sample_prover() -> ProverInfo {
+        let public = Keypair::generate_ed25519().public();
+        ProverInfo {
+            evm_address: Address::zero(),
+            peer_id: public.to_peer_id(),
+            address: "/ip4/127.0.0.1/tcp/8000".parse().unwrap(),
+            rpcaddr: "http://127.0.0.1:8000".to_string(),
+            human_pub_key: HumanPublicKey(public),
+            rsa_pub_key: "rsa".to_string(),
+            voting_power: U256::from(10u64),
+            idx: 0,
+        }
+    }
+
+    // The pubkey field must travel on the wire as `mishti_pub_key` (what old V3.2.0
+    // nodes emit), and deserialization must accept both `mishti_pub_key` (old + new)
+    // and `human_pub_key` (un-reverted V3.3.0 stragglers) so mixed-version networks work.
+    #[test]
+    fn prover_info_emits_mishti_and_accepts_both_field_names() {
+        let prover = sample_prover();
+        let json = serde_json::to_value(&prover).unwrap();
+        assert!(json.get("mishti_pub_key").is_some(), "must serialize as mishti_pub_key");
+        assert!(json.get("human_pub_key").is_none(), "must not serialize as human_pub_key");
+
+        // Old-node wire format round-trips.
+        let from_mishti: ProverInfo = serde_json::from_value(json.clone()).unwrap();
+        assert_eq!(from_mishti, prover);
+
+        // human_pub_key alias still deserializes.
+        let mut obj = json.as_object().unwrap().clone();
+        let pk = obj.remove("mishti_pub_key").unwrap();
+        obj.insert("human_pub_key".to_string(), pk);
+        let from_human: ProverInfo = serde_json::from_value(serde_json::Value::Object(obj)).unwrap();
+        assert_eq!(from_human, prover);
+    }
 }

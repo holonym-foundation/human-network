@@ -187,7 +187,7 @@ pub async fn get_current_quorum(State(AppState { pool, .. }): State<AppState>) -
             multiplier_peer_id: p.multiplier_peer_id,
             multi_address: p.multi_address,
             rpc_address: p.rpc_address,
-            human_pub_key: p.human_pub_key,
+            mishti_pub_key: p.mishti_pub_key,
             rsa_pub_key: p.rsa_pub_key,
             voting_power: p.voting_power,
             node_idx: p.node_idx,

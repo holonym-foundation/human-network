@@ -15,7 +15,7 @@ diesel::table! {
         multiplier_peer_id -> Text,
         multi_address -> Text,
         rpc_address -> Text,
-        human_pub_key -> Text,
+        mishti_pub_key -> Text,
         rsa_pub_key -> Text,
         voting_power -> Text,
         node_idx -> Int4,

@@ -6,7 +6,7 @@ CREATE TABLE multiplier_info (
     multiplier_peer_id TEXT NOT NULL,
     multi_address TEXT NOT NULL, -- Multiaddr
     rpc_address TEXT NOT NULL,
-    human_pub_key TEXT NOT NULL, -- Stored as TEXT
+    mishti_pub_key TEXT NOT NULL, -- Stored as TEXT
     rsa_pub_key TEXT NOT NULL, -- Stored as TEXT
     voting_power TEXT NOT NULL, -- U256 stored as TEXT to preserve full precision
     node_idx INTEGER NOT NULL,

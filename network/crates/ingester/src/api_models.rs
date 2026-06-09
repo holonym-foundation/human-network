@@ -22,7 +22,7 @@ pub struct QuorumMemberResponse {
     pub multiplier_peer_id: String,
     pub multi_address: String,
     pub rpc_address: String,
-    pub human_pub_key: String,
+    pub mishti_pub_key: String,
     pub rsa_pub_key: String,
     pub voting_power: String,
     pub node_idx: i32,

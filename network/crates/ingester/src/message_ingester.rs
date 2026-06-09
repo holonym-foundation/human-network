@@ -221,7 +221,7 @@ impl KafkaMessageIngestor for QuorumResharingInfo {
                 multiplier_peer_id: multiplier.peer_id.to_string(),
                 multi_address: multiplier.address.to_string(),
                 rpc_address: multiplier.rpcaddr.clone(),
-                human_pub_key: multiplier.human_pub_key.to_string(), // Convert to String
+                mishti_pub_key: multiplier.human_pub_key.to_string(), // Convert to String (DB column is mishti_pub_key; ProverInfo field is human_pub_key)
                 rsa_pub_key: multiplier.rsa_pub_key.to_string(),       // Convert to String
                 voting_power: multiplier.voting_power.to_string(),     // Convert U256 to String
                 node_idx: idx as i32, // Use the loop index for `idx`
