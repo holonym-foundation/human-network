@@ -13,7 +13,7 @@ use tracing::{error, info, instrument, warn};
 
 use crate::api_models::{
     ApiResponse, CmcResponse, CurrentQuorumResponse, EigenResponse, KeyCount, KeysGeneratedChartData, MultiplierComputedRequests, MultiplierQuorumElections, NodeVersionCount, OperatorPointsResponse, PaginatedResponse,
-PeerReachabilityStatus, QuorumElectionResponse, QuorumMemberResponse, RequestResponse, SymbioticPointRecord, SymbioticPointsParams, SymbioticResponse, SymbioticStatsParams, SymbioticStatsResponse, SymbioticSyncedToResponse, TaskResponse,
+PeerReachabilityStatus, QuorumElectionResponse, QuorumMemberResponse, RequestResponse, SymbioticPointRecord, SymbioticPointsParams, SymbioticStake, SymbioticStatsParams, SymbioticStatsResponse, SymbioticSyncedToResponse, TaskResponse,
     TotalKeysGenerated, TotalNetworkTvl, UserCreditsResponse,
 };
 use crate::models::{MultiplierInfo, PeerReachabilityQuic, PeerReachabilityTcp, QuorumResharingInfoDb, Requests, Task, TaskAttestors, TaskPerformers, UserCredits};
@@ -829,13 +829,18 @@ pub async fn get_network_tvl(State(mut app_state): State<AppState>) -> Result<Js
 
 #[instrument(skip(client))]
 async fn fetch_symbiotic_tvl(client: &reqwest::Client) -> Result<f64, ApiError> {
-    let response = client
-        .get("https://app.symbiotic.fi/api/v2/networks/0x42F15F9E4dF4994317453477e80e24797CC1A929")
+    // v3 has no per-network endpoint; fetch all stakes and sum the ones for our network.
+    let stakes = client
+        .get("https://app.symbiotic.fi/api/v3/stakes")
         .send()
         .await?
-        .json::<SymbioticResponse>()
+        .json::<Vec<SymbioticStake>>()
         .await?;
-    Ok(response.stake_usd)
+    Ok(stakes
+        .iter()
+        .filter(|s| s.network.eq_ignore_ascii_case(HUMAN_NETWORK_ADDRESS))
+        .map(|s| s.stake_usd)
+        .sum())
 }
 
 #[instrument(skip(client, api_key))]

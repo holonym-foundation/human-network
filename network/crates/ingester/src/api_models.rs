@@ -167,11 +167,12 @@ pub struct SymbioticStatsResponse {
     pub operators: i64,
 }
 
-// --- Symbiotic TVL (existing) ---
+// --- Symbiotic TVL (v3 stakes) ---
 
 #[derive(Deserialize)]
-pub struct SymbioticResponse {
-    #[serde(rename = "stakeUsd")]
+pub struct SymbioticStake {
+    pub network: String,
+    #[serde(rename = "stakeUSD")]
     pub stake_usd: f64,
 }
 
