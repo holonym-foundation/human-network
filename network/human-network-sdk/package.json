@@ -9,6 +9,11 @@
   },
   "main": "./dist/cjs/human_network_sdk.js",
   "module": "./dist/esm/human_network_sdk.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/holonym-foundation/human-network.git",
+    "directory": "network/human-network-sdk"
+  },
   "author": "Holonym Foundation",
   "license": "MIT",
   "private": false,
