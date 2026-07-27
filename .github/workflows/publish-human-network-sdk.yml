@@ -36,15 +36,21 @@ jobs:
       - name: Install wasm-pack
         run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
-      # Setup .npmrc file to publish to npm
       - uses: actions/setup-node@v4
         with:
           node-version: '20.x'
           registry-url: 'https://registry.npmjs.org'
 
+      # OIDC trusted publishing requires npm >= 11.5.1, which is newer than
+      # the version bundled with Node 20.
+      - name: Upgrade npm for trusted publishing
+        run: npm install -g npm@latest
+
       - run: npm run build
         working-directory: ./network/human-network-sdk
+      # No NODE_AUTH_TOKEN needed: npm exchanges the GitHub OIDC token
+      # (id-token: write above) for a short-lived registry token. This
+      # requires the package to be configured with a trusted publisher on
+      # npmjs.com pointing at this repo + workflow file.
       - run: npm publish --access public
         working-directory: ./network/human-network-sdk
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.HUMAN_TECH_NPM_TOKEN }}
